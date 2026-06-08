@@ -1,0 +1,15 @@
+--- PAGE: /about ---
+URL: https://acme.fi/about
+TITLE: About Acme Logistics
+DESCRIPTION: Leading Finnish logistics provider since 1998.
+
+HEADINGS:
+# About Acme Logistics
+## Our Services
+## Contact
+
+CONTENT:
+About Acme Logistics Acme Logistics Oy provides freight, warehousing, and last-mile delivery services across Finland. Founded in 1998, we employ 150 people from our headquarters in Helsinki. Our Services Freight forwarding Warehousing Cross-border logistics Contact Email: sales@acme.fi | Phone: +358 9 123 4567
+
+STRUCTURED DATA:
+{"@context":"https://schema.org","@type":"Organization","name":"Acme Logistics Oy","url":"https://acme.fi/about","description":"Freight and warehousing services in Finland"}

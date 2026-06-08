@@ -1,0 +1,162 @@
+import { describe, expect, it, vi } from "vitest";
+import { SearchApiService } from "@/services/application/search-api.service.js";
+import { ApiError } from "@/lib/api/api-error.js";
+import type { SearchApiServiceDependencies } from "@/services/application/search-api.service.js";
+
+const userId = "00000000-0000-4000-8000-000000000001";
+const searchJobId = "00000000-0000-4000-8000-000000000030";
+
+function createJob(overrides: Partial<ReturnType<typeof baseJob>> = {}) {
+  return { ...baseJob(), ...overrides };
+}
+
+function baseJob() {
+  return {
+    id: searchJobId,
+    userId,
+    query: "logistics companies in Finland",
+    criteria: {},
+    status: "PENDING" as const,
+    companyLimit: 25,
+    errorMessage: null,
+    startedAt: null,
+    completedAt: null,
+    createdAt: new Date("2026-06-07T12:00:00.000Z"),
+    updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+  };
+}
+
+function createDependencies(
+  overrides: Partial<SearchApiServiceDependencies> = {},
+): SearchApiServiceDependencies {
+  return {
+    searchRepository: {
+      createJob: vi.fn().mockResolvedValue(createJob()),
+      findJobByIdForUser: vi.fn().mockResolvedValue(createJob()),
+      findResultsByJobId: vi.fn().mockResolvedValue([]),
+      countActiveJobsForUser: vi.fn().mockResolvedValue(0),
+    } as unknown as SearchApiServiceDependencies["searchRepository"],
+    leadRepository: {
+      findResultsWithDetailsForJob: vi.fn().mockResolvedValue([]),
+    } as unknown as SearchApiServiceDependencies["leadRepository"],
+    searchOrchestrator: {
+      run: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+    } as unknown as SearchApiServiceDependencies["searchOrchestrator"],
+    ...overrides,
+  };
+}
+
+describe("SearchApiService", () => {
+  it("creates a search job and returns 202 payload shape", async () => {
+    const deps = createDependencies();
+    const service = new SearchApiService(deps);
+
+    const result = await service.createSearch(userId, {
+      query: "logistics companies in Finland",
+      companyLimit: 10,
+    });
+
+    expect(result.id).toBe(searchJobId);
+    expect(result.status).toBe("PENDING");
+    expect(result.companyLimit).toBe(25);
+    expect(result.links.self).toBe(`/api/v1/search/${searchJobId}`);
+    expect(deps.searchRepository.createJob).toHaveBeenCalledWith({
+      userId,
+      query: "logistics companies in Finland",
+      companyLimit: 10,
+    });
+  });
+
+  it("starts background orchestration for accepted searches", async () => {
+    const deps = createDependencies();
+    const service = new SearchApiService(deps);
+
+    await service.createSearch(userId, { query: "SaaS startups" });
+    await Promise.resolve();
+
+    expect(deps.searchOrchestrator.run).toHaveBeenCalledWith({
+      userId,
+      query: "SaaS startups",
+      companyLimit: undefined,
+      searchJobId,
+    });
+  });
+
+  it("throws not found when search job is inaccessible", async () => {
+    const deps = createDependencies({
+      searchRepository: {
+        createJob: vi.fn(),
+        findJobByIdForUser: vi.fn().mockResolvedValue(null),
+        findResultsByJobId: vi.fn(),
+      } as unknown as SearchApiServiceDependencies["searchRepository"],
+    });
+    const service = new SearchApiService(deps);
+
+    await expect(
+      service.getSearch(userId, searchJobId, { includeFailures: true }),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: "NOT_FOUND",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("returns mapped search details for owned jobs", async () => {
+    const deps = createDependencies({
+      searchRepository: {
+        createJob: vi.fn(),
+        findJobByIdForUser: vi.fn().mockResolvedValue(
+          createJob({ status: "COMPLETED", criteria: { industry: "logistics" } }),
+        ),
+        findResultsByJobId: vi.fn().mockResolvedValue([
+          {
+            id: "00000000-0000-4000-8000-000000000040",
+            searchJobId,
+            companyId: "00000000-0000-4000-8000-000000000010",
+            stage: "SCORED",
+            rank: 1,
+            discoverySource: null,
+            discoveryUrl: null,
+            stageError: null,
+            discoveredAt: new Date("2026-06-07T12:00:00.000Z"),
+            completedAt: new Date("2026-06-07T12:01:00.000Z"),
+            createdAt: new Date("2026-06-07T12:00:00.000Z"),
+            updatedAt: new Date("2026-06-07T12:01:00.000Z"),
+          },
+        ]),
+      } as unknown as SearchApiServiceDependencies["searchRepository"],
+      leadRepository: {
+        findResultsWithDetailsForJob: vi.fn().mockResolvedValue([
+          {
+            searchResultId: "00000000-0000-4000-8000-000000000040",
+            searchJobId,
+            rank: 1,
+            stage: "SCORED",
+            company: {
+              id: "00000000-0000-4000-8000-000000000010",
+              domain: "acme.fi",
+              normalizedDomain: "acme.fi",
+              name: "Acme Logistics Oy",
+              websiteUrl: "https://acme.fi",
+              firstSeenAt: new Date("2026-06-07T12:00:00.000Z"),
+              lastCrawledAt: null,
+              createdAt: new Date("2026-06-07T12:00:00.000Z"),
+              updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+            },
+            profile: null,
+            leadScore: null,
+          },
+        ]),
+      } as unknown as SearchApiServiceDependencies["leadRepository"],
+    });
+    const service = new SearchApiService(deps);
+
+    const result = await service.getSearch(userId, searchJobId, {
+      includeFailures: true,
+    });
+
+    expect(result.id).toBe(searchJobId);
+    expect(result.status).toBe("COMPLETED");
+    expect(result.summary.scored).toBe(1);
+    expect(result.results).toHaveLength(1);
+  });
+});

@@ -1,0 +1,168 @@
+// Sales Intelligence Platform — Database Schema
+// PostgreSQL + Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum SearchJobStatus {
+  PENDING
+  DISCOVERING
+  CRAWLING
+  EXTRACTING
+  SCORING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SearchResultStage {
+  DISCOVERED
+  CRAWLING
+  CRAWL_FAILED
+  CRAWLED
+  EXTRACTING
+  EXTRACT_FAILED
+  EXTRACTED
+  SCORING
+  SCORE_FAILED
+  SCORED
+}
+
+// ---------------------------------------------------------------------------
+// Company — globally deduplicated company record keyed by domain
+// ---------------------------------------------------------------------------
+
+model Company {
+  id               String    @id @default(uuid()) @db.Uuid
+  domain           String    @db.VarChar(253)
+  normalizedDomain String    @unique @db.VarChar(253)
+  name             String?   @db.VarChar(500)
+  websiteUrl       String?   @db.VarChar(2048)
+  firstSeenAt      DateTime  @default(now()) @db.Timestamptz(3)
+  lastCrawledAt    DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+
+  profiles      CompanyProfile[]
+  searchResults SearchResult[]
+
+  @@index([lastCrawledAt])
+  @@index([name])
+  @@map("companies")
+}
+
+// ---------------------------------------------------------------------------
+// CompanyProfile — versioned AI-extracted structured data per company
+// ---------------------------------------------------------------------------
+
+model CompanyProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  companyId      String   @db.Uuid
+  version        Int
+  structuredData Json
+  completeness   Decimal? @db.Decimal(4, 3)
+  modelUsed      String?  @db.VarChar(100)
+  promptVersion  String?  @db.VarChar(50)
+  contentHash    String?  @db.VarChar(64)
+  extractedAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, version])
+  @@index([companyId, extractedAt(sort: Desc)])
+  @@index([contentHash])
+  @@map("company_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// SearchJob — user-initiated search request and pipeline lifecycle
+// ---------------------------------------------------------------------------
+
+model SearchJob {
+  id           String          @id @default(uuid()) @db.Uuid
+  userId       String          @db.Uuid
+  query        String          @db.Text
+  criteria     Json            @default("{}")
+  status       SearchJobStatus @default(PENDING)
+  companyLimit Int             @default(25)
+  errorMessage String?         @db.Text
+  startedAt    DateTime?       @db.Timestamptz(3)
+  completedAt  DateTime?       @db.Timestamptz(3)
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
+
+  results   SearchResult[]
+  leadScores LeadScore[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("search_jobs")
+}
+
+// ---------------------------------------------------------------------------
+// SearchResult — links a company to a search job; tracks per-lead pipeline
+// ---------------------------------------------------------------------------
+
+model SearchResult {
+  id              String            @id @default(uuid()) @db.Uuid
+  searchJobId     String            @db.Uuid
+  companyId       String            @db.Uuid
+  stage           SearchResultStage @default(DISCOVERED)
+  rank            Int?
+  discoverySource String?           @db.VarChar(100)
+  discoveryUrl    String?           @db.VarChar(2048)
+  stageError      String?           @db.Text
+  discoveredAt    DateTime          @default(now()) @db.Timestamptz(3)
+  completedAt     DateTime?         @db.Timestamptz(3)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(3)
+
+  searchJob SearchJob   @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
+  company   Company     @relation(fields: [companyId], references: [id])
+  leadScore LeadScore?
+
+  @@unique([searchJobId, companyId])
+  @@index([searchJobId, stage])
+  @@index([searchJobId, rank])
+  @@index([companyId])
+  @@map("search_results")
+}
+
+// ---------------------------------------------------------------------------
+// LeadScore — search-contextual score for a single search result
+// ---------------------------------------------------------------------------
+
+model LeadScore {
+  id             String   @id @default(uuid()) @db.Uuid
+  searchResultId String   @unique @db.Uuid
+  searchJobId    String   @db.Uuid
+  totalScore     Decimal  @db.Decimal(5, 2)
+  confidence     Decimal  @db.Decimal(4, 3)
+  breakdown      Json     @default("{}")
+  rationale      String   @db.Text
+  modelUsed      String?  @db.VarChar(100)
+  promptVersion  String?  @db.VarChar(50)
+  scoredAt       DateTime @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  searchResult SearchResult @relation(fields: [searchResultId], references: [id], onDelete: Cascade)
+  searchJob    SearchJob    @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
+
+  @@index([searchJobId, totalScore(sort: Desc)])
+  @@index([searchJobId, confidence(sort: Desc)])
+  @@map("lead_scores")
+}
