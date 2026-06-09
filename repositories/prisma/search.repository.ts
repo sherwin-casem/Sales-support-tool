@@ -7,6 +7,7 @@ import {
 import { resolveDbClient, type DbClient } from "@/lib/db/db-client.types.js";
 import { isUniqueConstraintError } from "@/lib/db/prisma-errors.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
+import { ACTIVE_SEARCH_JOB_STATUSES } from "@/lib/search/search-job-lifecycle.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
 import { PrismaCompanyRepository } from "@/repositories/prisma/company.repository.js";
@@ -18,6 +19,7 @@ import type {
   AddDiscoveredCompaniesResult,
   CreateSearchJobInput,
   DiscoveredCompanyInput,
+  FailStaleSearchJobsInput,
   SearchJobRecord,
   SearchResultRecord,
   UpdateSearchResultStageInput,
@@ -258,16 +260,59 @@ export class PrismaSearchRepository implements SearchRepository {
       where: {
         userId,
         status: {
-          in: [
-            SearchJobStatus.PENDING,
-            SearchJobStatus.DISCOVERING,
-            SearchJobStatus.CRAWLING,
-            SearchJobStatus.EXTRACTING,
-            SearchJobStatus.SCORING,
-          ],
+          in: [...ACTIVE_SEARCH_JOB_STATUSES],
         },
       },
     });
+  }
+
+  async failStaleJobs(
+    input: FailStaleSearchJobsInput,
+    tx?: DbClient,
+  ): Promise<SearchJobRecord[]> {
+    const client = resolveDbClient(this.prisma, tx);
+    const completedAt = new Date();
+    const activePipelineStatuses = ACTIVE_SEARCH_JOB_STATUSES.filter(
+      (status) => status !== SearchJobStatus.PENDING,
+    );
+
+    const staleJobs = await client.searchJob.findMany({
+      where: {
+        ...(input.userId ? { userId: input.userId } : {}),
+        OR: [
+          {
+            status: SearchJobStatus.PENDING,
+            createdAt: { lt: input.pendingStaleBefore },
+          },
+          {
+            status: { in: activePipelineStatuses },
+            updatedAt: { lt: input.activeStaleBefore },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (staleJobs.length === 0) {
+      return [];
+    }
+
+    const staleJobIds = staleJobs.map((job) => job.id);
+
+    await client.searchJob.updateMany({
+      where: { id: { in: staleJobIds } },
+      data: {
+        status: SearchJobStatus.FAILED,
+        errorMessage: input.errorMessage,
+        completedAt,
+      },
+    });
+
+    const records = await client.searchJob.findMany({
+      where: { id: { in: staleJobIds } },
+    });
+
+    return records.map(mapSearchJob);
   }
 
   async findResultById(

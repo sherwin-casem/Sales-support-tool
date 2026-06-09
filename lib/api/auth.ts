@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { ApiError } from "@/lib/api/api-error.js";
 import {
   getSecurityConfig,
@@ -7,17 +6,6 @@ import {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function safeEqual(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(leftBuffer, rightBuffer);
-}
 
 export function getAuthenticatedUserId(request: Request): string {
   const authorization = request.headers.get("authorization");
@@ -56,18 +44,4 @@ export function getAuthenticatedUserId(request: Request): string {
   }
 
   return token;
-}
-
-export function createBearerToken(userId: string, secret: string): string {
-  return `${secret}:${userId}`;
-}
-
-export function verifyApiKeyHeader(request: Request, expectedSecret: string): boolean {
-  const apiKey = request.headers.get("x-api-key");
-
-  if (!apiKey) {
-    return false;
-  }
-
-  return safeEqual(apiKey, expectedSecret);
 }

@@ -23,8 +23,7 @@ flowchart TB
   end
 
   subgraph external [External Services]
-    OpenAI[OpenAI API]
-    Discovery[DuckDuckGo / Wikidata]
+    OpenAI[OpenAI API<br/>discovery + extraction + scoring]
   end
 
   subgraph worker [Recommended: Crawler Worker]
@@ -35,7 +34,6 @@ flowchart TB
   Next --> Fn
   Fn --> PG
   Fn --> OpenAI
-  Fn --> Discovery
   Fn -.->|HTTP job dispatch| Crawler
   Crawler --> PG
 ```
@@ -99,6 +97,8 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 | `API_RATE_LIMIT_MAX_REQUESTS` | `60` | Max requests per IP per window |
 | `API_SEARCH_RATE_LIMIT_MAX` | `5` | Max search POSTs per user per window |
 | `API_MAX_CONCURRENT_SEARCHES` | `2` | Active pipeline jobs per user |
+| `SEARCH_JOB_PENDING_STALE_MS` | `300000` (5 min) | Fail `PENDING` jobs older than this (orphaned after restart) |
+| `SEARCH_JOB_ACTIVE_STALE_MS` | `1200000` (20 min) | Fail in-progress jobs with no updates older than this |
 | `API_MAX_JSON_BODY_BYTES` | `16384` | Max request body size |
 
 ### Client (staging only)
@@ -112,22 +112,27 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CRAWLER_MAX_CONTEXTS` | `3` | Browser contexts |
-| `CRAWLER_GLOBAL_CONCURRENCY` | `3` | Parallel crawls |
+| `CRAWLER_GLOBAL_CONCURRENCY` | `3` | Parallel crawl operations (shared pool) |
+| `CRAWLER_SEARCH_CONCURRENCY` | `3` | Companies crawled in parallel per search job |
 | `CRAWLER_RESPECT_ROBOTS` | `true` | Honor robots.txt |
 | `CRAWLER_USER_AGENT` | Bot identifier | Include contact URL |
 
-### Discovery (DuckDuckGo / Wikidata)
+Set `CRAWLER_SEARCH_CONCURRENCY`, `CRAWLER_MAX_CONTEXTS`, and `CRAWLER_GLOBAL_CONCURRENCY` to similar values (e.g. all `3`). Raising search concurrency without enough browser contexts causes queueing.
+
+### Search pipeline (OpenAI stages)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DISCOVERY_DDG_MODE` | `auto` | `http` \| `playwright` \| `auto` — HTTP first, Playwright fallback when blocked |
-| `DISCOVERY_DDG_USER_AGENT` | Chrome desktop UA | Browser-like user agent for DuckDuckGo requests |
-| `DISCOVERY_DDG_TIMEOUT_MS` | `15000` | DuckDuckGo request timeout (HTTP and Playwright) |
-| `DISCOVERY_HTTP_PROXY` | _(unset)_ | Optional HTTP proxy for discovery requests on datacenter/VPS IPs |
+| `SEARCH_EXTRACTION_CONCURRENCY` | `3` | Companies extracted in parallel per search job |
+| `SEARCH_SCORING_CONCURRENCY` | `3` | Leads scored in parallel per search job |
 
-On datacenter IPs, DuckDuckGo often returns a captcha page to plain HTTP clients. Use `auto` mode (default) so Playwright is attempted after HTTP is blocked. If both fail, set `DISCOVERY_HTTP_PROXY` to a residential or allowed egress proxy.
+Both stages call OpenAI. Keep concurrency modest to avoid rate limits; start at `3` and raise only if your API tier allows it.
 
-Playwright-based discovery fallback has the same Vercel constraint as the crawler: it requires a worker/runtime with Chromium, not serverless functions alone.
+### Discovery (OpenAI web search)
+
+Company discovery uses the OpenAI Responses API with the built-in **web search** tool. The full natural-language search query is sent to the model (industry and location are optional hints from the query parser).
+
+Use a web-search-capable model via `OPENAI_MODEL` (for example `gpt-4o-mini` or `gpt-4o`). Discovery shares the same API key as extraction and scoring.
 
 ### Neon / Vercel Postgres connection strings
 

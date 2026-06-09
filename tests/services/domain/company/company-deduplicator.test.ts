@@ -9,19 +9,19 @@ describe("CompanyDeduplicatorService", () => {
       {
         companyName: "Acme Logistics",
         website: "https://www.acme.fi",
-        source: "wikidata",
+        source: "openai_web_search",
         confidence: 0.85,
       },
       {
         companyName: "ACME",
         website: "https://acme.fi/about",
-        source: "duckduckgo_html",
+        source: "openai_web_search",
         confidence: 0.55,
       },
       {
         companyName: "LinkedIn",
         website: "https://linkedin.com/company/acme",
-        source: "duckduckgo_html",
+        source: "openai_web_search",
         confidence: 0.99,
       },
     ];

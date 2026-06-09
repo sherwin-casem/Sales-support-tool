@@ -19,7 +19,6 @@
     "db:reset": "prisma migrate reset",
     "test": "vitest run",
     "test:watch": "vitest",
-    "example:text-cleaning": "tsx examples/text-cleaning.example.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

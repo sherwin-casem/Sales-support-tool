@@ -35,7 +35,10 @@ describe("CompanyExtractionAgent", () => {
     );
 
     createStructuredCompletion = vi.fn();
-    const openai: OpenAIClientPort = { createStructuredCompletion };
+    const openai: OpenAIClientPort = {
+      createStructuredCompletion,
+      createWebDiscoveryCompletion: vi.fn(),
+    };
 
     agent = new CompanyExtractionAgent(openai, {
       model: "gpt-4o",

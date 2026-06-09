@@ -1,6 +1,9 @@
+export const COMPANY_DISCOVERY_PROMPT_VERSION = "v1";
+
 export interface CompanyDiscoveryInput {
-  industry: string;
-  location: string;
+  query: string;
+  industry?: string;
+  location?: string;
   limit?: number;
 }
 
@@ -14,20 +17,4 @@ export interface RawDiscoveryCandidate {
   website: string;
   source: string;
   confidence: number;
-}
-
-export interface LocationContext {
-  location: string;
-  city?: string;
-  regionHint?: string;
-  countryCode?: string;
-  countryQid?: string;
-  primaryTld?: string;
-}
-
-export interface DiscoveryCriteria {
-  industry: string;
-  location: string;
-  locationContext: LocationContext;
-  limit: number;
 }

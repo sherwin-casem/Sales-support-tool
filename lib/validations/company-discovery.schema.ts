@@ -1,17 +1,49 @@
 import { z } from "zod";
 
+const optionalHint = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+
+    if (!trimmed || trimmed.toLowerCase() === "unknown") {
+      return undefined;
+    }
+
+    return trimmed;
+  },
+  z
+    .string()
+    .max(200)
+    .transform((hint) => hint.toLowerCase())
+    .optional(),
+);
+
 export const CompanyDiscoveryInputSchema = z.object({
-  industry: z
+  query: z
     .string()
     .trim()
-    .min(1, "industry must not be empty")
-    .max(200, "industry must be at most 200 characters")
-    .transform((value) => value.toLowerCase()),
-  location: z
-    .string()
-    .trim()
-    .min(1, "location must not be empty")
-    .max(200, "location must be at most 200 characters"),
+    .min(1, "query must not be empty")
+    .max(2000, "query must be at most 2000 characters"),
+  industry: optionalHint,
+  location: z.preprocess(
+    (value) => {
+      if (typeof value !== "string") {
+        return value;
+      }
+
+      const trimmed = value.trim();
+
+      if (!trimmed || trimmed.toLowerCase() === "unknown") {
+        return undefined;
+      }
+
+      return trimmed;
+    },
+    z.string().max(200).optional(),
+  ),
   limit: z.number().int().min(1).max(100).optional().default(25),
 });
 
@@ -21,6 +53,36 @@ export const DiscoveredCompanySchema = z.object({
 });
 
 export const DiscoveredCompanyListSchema = z.array(DiscoveredCompanySchema);
+
+export const DiscoveredCompanyListResponseSchema = z.object({
+  companies: DiscoveredCompanyListSchema,
+});
+
+export const DISCOVERED_COMPANY_LIST_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    companies: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          companyName: {
+            type: "string",
+            description: "Official company or brand name",
+          },
+          website: {
+            type: "string",
+            description: "Official company website URL",
+          },
+        },
+        required: ["companyName", "website"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["companies"],
+  additionalProperties: false,
+} as const;
 
 export type CompanyDiscoveryInputValidated = z.infer<
   typeof CompanyDiscoveryInputSchema

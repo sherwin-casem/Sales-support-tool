@@ -1,51 +1,38 @@
 import { describe, expect, it, vi } from "vitest";
 import { CompanyDiscoveryAgent } from "@/agents/discovery/company-discovery.agent.js";
-import { DiscoverySourceError } from "@/services/infrastructure/discovery/sources/discovery-source.interface.js";
-import type { DiscoverySource } from "@/services/infrastructure/discovery/sources/discovery-source.interface.js";
-import type { DiscoveryCriteria, RawDiscoveryCandidate } from "@/types/agents/company-discovery.types.js";
+import type { OpenAIClientPort } from "@/lib/config/openai.client.js";
 
-function createSource(
-  name: string,
-  tier: 1 | 2,
-  candidates: RawDiscoveryCandidate[] | "fail",
-): DiscoverySource {
+function createOpenAiMock(
+  createWebDiscoveryCompletion: ReturnType<typeof vi.fn>,
+): OpenAIClientPort {
   return {
-    name,
-    tier,
-    discover: vi.fn(async () => {
-      if (candidates === "fail") {
-        throw new DiscoverySourceError(name, `${name} failed`);
-      }
-
-      return candidates;
-    }),
+    createStructuredCompletion: vi.fn(),
+    createWebDiscoveryCompletion,
   };
 }
 
 describe("CompanyDiscoveryAgent", () => {
-  it("merges tier 1 results and skips tier 2 when limit is met", async () => {
-    const tier1 = createSource("wikidata", 1, [
-      {
-        companyName: "Acme Logistics",
-        website: "https://www.acme.fi",
-        source: "wikidata",
-        confidence: 0.85,
-      },
-    ]);
-    const tier2 = createSource("duckduckgo_html", 2, [
-      {
-        companyName: "Other Logistics",
-        website: "https://other.fi",
-        source: "duckduckgo_html",
-        confidence: 0.55,
-      },
-    ]);
+  it("returns discovered companies from OpenAI web search", async () => {
+    const createWebDiscoveryCompletion = vi.fn().mockResolvedValue(
+      JSON.stringify({
+        companies: [
+          {
+            companyName: "Acme Logistics",
+            website: "https://www.acme.fi",
+          },
+        ],
+      }),
+    );
 
-    const agent = new CompanyDiscoveryAgent({ sources: [tier1, tier2] });
+    const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
+      model: "gpt-4o-mini",
+    });
+
     const result = await agent.execute({
+      query: "logistics companies in Finland",
       industry: "logistics",
       location: "Finland",
-      limit: 1,
+      limit: 5,
     });
 
     expect(result.ok).toBe(true);
@@ -58,102 +45,139 @@ describe("CompanyDiscoveryAgent", () => {
       ]);
     }
 
-    expect(tier2.discover).not.toHaveBeenCalled();
+    expect(createWebDiscoveryCompletion).toHaveBeenCalledOnce();
+    expect(createWebDiscoveryCompletion.mock.calls[0]?.[0].schemaName).toBe(
+      "discovered_companies",
+    );
   });
 
-  it("falls back to tier 2 when tier 1 returns insufficient results", async () => {
-    const tier1 = createSource("wikidata", 1, []);
-    const tier2 = createSource("duckduckgo_html", 2, [
-      {
-        companyName: "Fallback Logistics",
-        website: "https://fallback.fi",
-        source: "duckduckgo_html",
-        confidence: 0.65,
-      },
-    ]);
+  it("supports location-only queries without industry", async () => {
+    const createWebDiscoveryCompletion = vi.fn().mockResolvedValue(
+      JSON.stringify({
+        companies: [
+          {
+            companyName: "Berlin Startup GmbH",
+            website: "https://berlin-startup.de",
+          },
+        ],
+      }),
+    );
 
-    const agent = new CompanyDiscoveryAgent({ sources: [tier1, tier2] });
+    const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
+      model: "gpt-4o-mini",
+    });
+
     const result = await agent.execute({
-      industry: "logistics",
-      location: "Finland",
-      limit: 5,
+      query: "companies in Berlin",
+      location: "Berlin",
+      limit: 10,
     });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value[0]?.companyName).toBe("Fallback Logistics");
+      expect(result.value[0]?.companyName).toBe("Berlin Startup GmbH");
     }
-
-    expect(tier2.discover).toHaveBeenCalledOnce();
   });
 
-  it("returns all sources failed when every source throws", async () => {
-    const tier1 = createSource("wikidata", 1, "fail");
-    const tier2 = createSource("duckduckgo_html", 2, "fail");
+  it("deduplicates companies by domain and respects limit", async () => {
+    const createWebDiscoveryCompletion = vi.fn().mockResolvedValue(
+      JSON.stringify({
+        companies: [
+          {
+            companyName: "Acme Logistics",
+            website: "https://www.acme.fi/about",
+          },
+          {
+            companyName: "Acme Logistics Oy",
+            website: "https://acme.fi",
+          },
+          {
+            companyName: "Other Logistics",
+            website: "https://other.fi",
+          },
+        ],
+      }),
+    );
 
-    const agent = new CompanyDiscoveryAgent({ sources: [tier1, tier2] });
+    const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
+      model: "gpt-4o-mini",
+    });
+
     const result = await agent.execute({
-      industry: "logistics",
-      location: "Finland",
+      query: "logistics companies in Finland",
+      limit: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(1);
+    }
+  });
+
+  it("returns discovery failed when OpenAI throws", async () => {
+    const createWebDiscoveryCompletion = vi
+      .fn()
+      .mockRejectedValue(new Error("rate limit exceeded"));
+
+    const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
+      model: "gpt-4o-mini",
+      maxAttempts: 1,
+    });
+
+    const result = await agent.execute({
+      query: "companies in Houston",
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe("ALL_SOURCES_FAILED");
+      expect(result.error.code).toBe("DISCOVERY_FAILED");
     }
   });
 
-  it("retries with generic industry when specific industry returns no results", async () => {
-    const wikidata: DiscoverySource = {
-      name: "wikidata",
-      tier: 1,
-      discover: vi
-        .fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          {
-            companyName: "US Business Inc",
-            website: "https://usbusiness.com",
-            source: "wikidata",
-            confidence: 0.85,
-          },
-        ]),
-    };
-    const duckduckgo: DiscoverySource = {
-      name: "duckduckgo_html",
-      tier: 2,
-      discover: vi.fn().mockResolvedValue([]),
-    };
+  it("returns invalid input for empty query", async () => {
+    const createWebDiscoveryCompletion = vi.fn();
 
-    const agent = new CompanyDiscoveryAgent({ sources: [wikidata, duckduckgo] });
-    const result = await agent.execute({
-      industry: "obscure-industry",
-      location: "United States",
-      limit: 5,
+    const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
+      model: "gpt-4o-mini",
     });
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toEqual([
-        {
-          companyName: "US Business Inc",
-          website: "https://usbusiness.com",
-        },
-      ]);
-    }
-    expect(wikidata.discover).toHaveBeenCalledTimes(2);
-  });
-
-  it("returns invalid input for empty industry", async () => {
-    const agent = new CompanyDiscoveryAgent({ sources: [] });
     const result = await agent.execute({
-      industry: "  ",
-      location: "Finland",
+      query: "  ",
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("INVALID_INPUT");
     }
+
+    expect(createWebDiscoveryCompletion).not.toHaveBeenCalled();
+  });
+
+  it("retries when OpenAI returns invalid JSON", async () => {
+    const createWebDiscoveryCompletion = vi
+      .fn()
+      .mockResolvedValueOnce("not-json")
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          companies: [
+            {
+              companyName: "Retry Logistics",
+              website: "https://retry.fi",
+            },
+          ],
+        }),
+      );
+
+    const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
+      model: "gpt-4o-mini",
+      maxAttempts: 2,
+    });
+
+    const result = await agent.execute({
+      query: "logistics companies in Finland",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createWebDiscoveryCompletion).toHaveBeenCalledTimes(2);
   });
 });

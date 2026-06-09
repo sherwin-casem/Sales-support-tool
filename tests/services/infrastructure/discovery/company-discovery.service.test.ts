@@ -25,6 +25,7 @@ describe("CompanyDiscoveryService", () => {
     const service = new CompanyDiscoveryService(agent, { maxAttempts: 1 });
 
     const result = await service.discover({
+      query: "logistics companies in Finland",
       industry: "logistics",
       location: "Finland",
     });
@@ -35,11 +36,11 @@ describe("CompanyDiscoveryService", () => {
     }
   });
 
-  it("retries when all sources fail", async () => {
+  it("retries when discovery fails transiently", async () => {
     const execute = vi
       .fn()
       .mockResolvedValueOnce(
-        err(new DiscoveryError("ALL_SOURCES_FAILED", "all sources failed")),
+        err(new DiscoveryError("DISCOVERY_FAILED", "web search failed")),
       )
       .mockResolvedValueOnce(
         ok([
@@ -57,8 +58,7 @@ describe("CompanyDiscoveryService", () => {
     });
 
     const result = await service.discover({
-      industry: "logistics",
-      location: "Finland",
+      query: "companies in Finland",
     });
 
     expect(result.ok).toBe(true);
@@ -74,8 +74,7 @@ describe("CompanyDiscoveryService", () => {
     const service = new CompanyDiscoveryService(agent, { maxAttempts: 1 });
 
     const result = await service.discover({
-      industry: " ",
-      location: "Finland",
+      query: " ",
     });
 
     expect(result.ok).toBe(false);
@@ -86,10 +85,10 @@ describe("CompanyDiscoveryService", () => {
 });
 
 describe("mapCompanyDiscoveryError", () => {
-  it("maps all sources failed to 503", () => {
+  it("maps discovery failed to 503", () => {
     const mapped = mapCompanyDiscoveryError(
       CompanyDiscoveryError.fromDiscoveryError(
-        new DiscoveryError("ALL_SOURCES_FAILED", "failed"),
+        new DiscoveryError("DISCOVERY_FAILED", "failed"),
       ),
     );
 

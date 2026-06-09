@@ -1,5 +1,3 @@
-import type { DiscoveryConfig } from "@/lib/config/discovery.config.js";
-
 export interface HttpResponse {
   ok: boolean;
   status: number;
@@ -8,7 +6,6 @@ export interface HttpResponse {
 
 export interface HttpClient {
   get(url: string, init?: RequestInit): Promise<HttpResponse>;
-  post(url: string, body: URLSearchParams, init?: RequestInit): Promise<HttpResponse>;
 }
 
 export interface FetchHttpClientOptions {
@@ -20,24 +17,6 @@ export class FetchHttpClient implements HttpClient {
 
   async get(url: string, init?: RequestInit): Promise<HttpResponse> {
     const response = await fetch(url, this.buildRequestInit(init));
-    return wrapResponse(response);
-  }
-
-  async post(
-    url: string,
-    body: URLSearchParams,
-    init?: RequestInit,
-  ): Promise<HttpResponse> {
-    const response = await fetch(url, {
-      ...this.buildRequestInit(init),
-      method: "POST",
-      headers: mergeHeaders(
-        { "Content-Type": "application/x-www-form-urlencoded" },
-        init?.headers,
-      ),
-      body: body.toString(),
-    });
-
     return wrapResponse(response);
   }
 
@@ -91,13 +70,3 @@ function toRecord(headers?: HeadersInit): Record<string, string> {
 }
 
 export const httpClient = new FetchHttpClient();
-
-export function createDiscoveryHttpClient(config: DiscoveryConfig): HttpClient {
-  return new FetchHttpClient({
-    defaultTimeoutMs: config.DISCOVERY_DDG_TIMEOUT_MS,
-  });
-}
-
-export function createWikidataHttpClient(): HttpClient {
-  return new FetchHttpClient({ defaultTimeoutMs: 30_000 });
-}

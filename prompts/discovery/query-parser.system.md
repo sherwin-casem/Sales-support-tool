@@ -14,6 +14,8 @@ Extract exactly three fields:
 Rules:
 - Return all three fields on every response.
 - Use "unknown" when a field is not stated or cannot be reliably inferred from the query.
+- Location-only queries (e.g. "companies in Berlin", "businesses near Houston") are valid: set industry to "unknown" and extract the location.
+- Industry-only or broad queries without a place are also valid: set location to "unknown".
 - Do not invent criteria that are not implied by the query.
 - Normalize industry to a single primary lowercase term.
 - Prefer country names over regions when both are present.

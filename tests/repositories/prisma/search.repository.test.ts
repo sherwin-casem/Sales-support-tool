@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { PrismaCompanyRepository } from "@/repositories/prisma/company.repository.js";
 import { PrismaSearchRepository } from "@/repositories/prisma/search.repository.js";
 import { RepositoryError } from "@/types/repositories/repository-error.types.js";
 import {
   createMockCompany,
+  createMockCompanyRepository,
   createMockPrismaClient,
   createMockSearchJob,
   createMockSearchResult,
   createUniqueConstraintError,
+  toCompanyRecord,
 } from "./test-helpers.js";
 
 describe("PrismaSearchRepository", () => {
@@ -26,33 +27,44 @@ describe("PrismaSearchRepository", () => {
 
     expect(result.status).toBe("PENDING");
     expect(result.query).toBe(job.query);
+    expect(prisma.searchJob.create).toHaveBeenCalledWith({
+      data: {
+        userId: job.userId,
+        query: job.query,
+        criteria: job.criteria,
+        companyLimit: 25,
+        status: "PENDING",
+      },
+    });
   });
 
   it("adds discovered companies with deduplication in a transaction", async () => {
     const prisma = createMockPrismaClient();
     const job = createMockSearchJob();
-    const company = createMockCompany();
+    const company = toCompanyRecord(createMockCompany());
 
     prisma.searchJob.findUnique.mockResolvedValue({ id: job.id });
-    prisma.company.findUnique.mockResolvedValue(null);
-    prisma.company.upsert.mockResolvedValue(company);
     prisma.searchResult.create
       .mockResolvedValueOnce(createMockSearchResult())
       .mockRejectedValueOnce(createUniqueConstraintError());
 
-    const companyRepository = new PrismaCompanyRepository(prisma);
+    const companyRepository = createMockCompanyRepository({
+      companies: [company],
+      createdCount: 1,
+      updatedCount: 0,
+    });
     const repository = new PrismaSearchRepository(prisma, companyRepository);
 
     const result = await repository.addDiscoveredCompanies(job.id, [
       {
         companyName: "Acme Logistics Oy",
         website: "https://acme.fi",
-        discoverySource: "wikidata",
+        discoverySource: "discovery_agent",
       },
       {
         companyName: "Acme Logistics Oy",
         website: "https://www.acme.fi",
-        discoverySource: "duckduckgo_html",
+        discoverySource: "discovery_agent",
       },
     ]);
 
@@ -60,21 +72,30 @@ describe("PrismaSearchRepository", () => {
     expect(result.searchResults).toHaveLength(1);
     expect(result.skippedDuplicates).toBe(1);
     expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(companyRepository.upsertManyByDomain).toHaveBeenCalledWith(
+      [
+        { website: "https://acme.fi", name: "Acme Logistics Oy" },
+        { website: "https://www.acme.fi", name: "Acme Logistics Oy" },
+      ],
+      prisma,
+    );
   });
 
   it("skips duplicate search results for the same company and job", async () => {
     const prisma = createMockPrismaClient();
     const job = createMockSearchJob();
-    const company = createMockCompany();
+    const company = toCompanyRecord(createMockCompany());
 
     prisma.searchJob.findUnique.mockResolvedValue({ id: job.id });
-    prisma.company.findUnique.mockResolvedValue(null);
-    prisma.company.upsert.mockResolvedValue(company);
     prisma.searchResult.create
       .mockResolvedValueOnce(createMockSearchResult())
       .mockRejectedValueOnce(createUniqueConstraintError());
 
-    const companyRepository = new PrismaCompanyRepository(prisma);
+    const companyRepository = createMockCompanyRepository({
+      companies: [company],
+      createdCount: 1,
+      updatedCount: 0,
+    });
     const repository = new PrismaSearchRepository(prisma, companyRepository);
 
     const result = await repository.addDiscoveredCompanies(job.id, [
@@ -90,6 +111,7 @@ describe("PrismaSearchRepository", () => {
 
     expect(result.searchResults).toHaveLength(1);
     expect(result.skippedDuplicates).toBe(1);
+    expect(prisma.searchResult.create).toHaveBeenCalledTimes(2);
   });
 
   it("throws when search job does not exist", async () => {
@@ -97,8 +119,7 @@ describe("PrismaSearchRepository", () => {
 
     prisma.searchJob.findUnique.mockResolvedValue(null);
 
-    const companyRepository = new PrismaCompanyRepository(prisma);
-    const repository = new PrismaSearchRepository(prisma, companyRepository);
+    const repository = new PrismaSearchRepository(prisma);
 
     await expect(
       repository.addDiscoveredCompanies("00000000-0000-4000-8000-000000000099", [
@@ -128,6 +149,41 @@ describe("PrismaSearchRepository", () => {
     });
 
     expect(result.stage).toBe("CRAWLED");
+  });
+
+  it("fails stale pending and active jobs", async () => {
+    const prisma = createMockPrismaClient();
+    const staleJob = createMockSearchJob({ status: "PENDING" });
+    const failedJob = {
+      ...staleJob,
+      status: "FAILED" as const,
+      errorMessage: "Search timed out or was interrupted. Start a new search.",
+      completedAt: new Date("2026-06-09T12:00:00.000Z"),
+    };
+
+    prisma.searchJob.findMany
+      .mockResolvedValueOnce([{ id: staleJob.id }])
+      .mockResolvedValueOnce([failedJob]);
+    prisma.searchJob.updateMany.mockResolvedValue({ count: 1 });
+
+    const repository = new PrismaSearchRepository(prisma);
+    const result = await repository.failStaleJobs({
+      userId: staleJob.userId,
+      pendingStaleBefore: new Date("2026-06-09T11:55:00.000Z"),
+      activeStaleBefore: new Date("2026-06-09T11:40:00.000Z"),
+      errorMessage: "Search timed out or was interrupted. Start a new search.",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.status).toBe("FAILED");
+    expect(prisma.searchJob.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [staleJob.id] } },
+      data: {
+        status: "FAILED",
+        errorMessage: "Search timed out or was interrupted. Start a new search.",
+        completedAt: expect.any(Date),
+      },
+    });
   });
 
   it("updates search job status and criteria", async () => {
