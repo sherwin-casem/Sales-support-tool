@@ -16,6 +16,13 @@ export interface ExtractedCompany {
   services: string[];
   targetCustomers: string[];
   estimatedCompanySize: string;
+  city: string;
+  country: string;
+  decisionMaker: string;
+  linkedInUrl: string | null;
+  xUrl: string | null;
+  email: string | null;
+  revenue: string;
 }
 
 export interface ExtractionMeta {

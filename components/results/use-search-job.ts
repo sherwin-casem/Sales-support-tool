@@ -9,7 +9,6 @@ import type { GetSearchResponse } from "@/types/api/search.api.types";
 const POLL_INTERVAL_MS = 4000;
 
 export interface SearchJobApiFilters {
-  minScore?: number;
   stage?: GetSearchResponse["results"][number]["stage"];
 }
 
@@ -33,7 +32,6 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
 
       try {
         const response = await fetchSearchJob(searchJobId, {
-          minScore: apiFilters.minScore,
           stage: apiFilters.stage,
           includeFailures: true,
         });
@@ -63,7 +61,7 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
         }
       }
     },
-    [apiFilters.minScore, apiFilters.stage, searchJobId],
+    [apiFilters.stage, searchJobId],
   );
 
   useEffect(() => {

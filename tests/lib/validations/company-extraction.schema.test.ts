@@ -15,6 +15,13 @@ describe("ExtractedCompanySchema", () => {
       services: ["Freight forwarding", "Warehousing"],
       targetCustomers: ["Manufacturers", "Retailers"],
       estimatedCompanySize: "100-200",
+      city: "Helsinki",
+      country: "Finland",
+      decisionMaker: "Jane Doe, CEO",
+      linkedInUrl: "https://linkedin.com/company/acme",
+      xUrl: null,
+      email: "info@acme.fi",
+      revenue: "10M-50M EUR",
     });
 
     expect(result.success).toBe(true);
@@ -22,10 +29,12 @@ describe("ExtractedCompanySchema", () => {
       expect(result.data.industry).toBe("logistics");
       expect(result.data.products).toEqual(["Tracking Platform"]);
       expect(result.data.estimatedCompanySize).toBe("100-200");
+      expect(result.data.city).toBe("helsinki");
+      expect(result.data.email).toBe("info@acme.fi");
     }
   });
 
-  it("accepts unknown company size and empty arrays", () => {
+  it("applies defaults for legacy profiles missing new fields", () => {
     const result = ExtractedCompanySchema.safeParse({
       companyName: "Acme Oy",
       description: "A logistics company.",
@@ -37,6 +46,12 @@ describe("ExtractedCompanySchema", () => {
     });
 
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.city).toBe("unknown");
+      expect(result.data.decisionMaker).toBe("unknown");
+      expect(result.data.linkedInUrl).toBeNull();
+      expect(result.data.revenue).toBe("unknown");
+    }
   });
 
   it("rejects invalid estimatedCompanySize", () => {
@@ -76,6 +91,13 @@ describe("computeExtractionCompleteness", () => {
       services: ["Freight forwarding"],
       targetCustomers: ["Manufacturers"],
       estimatedCompanySize: "100-200",
+      city: "helsinki",
+      country: "finland",
+      decisionMaker: "Jane Doe, CEO",
+      linkedInUrl: "https://linkedin.com/company/acme",
+      xUrl: null,
+      email: "info@acme.fi",
+      revenue: "10M-50M EUR",
     });
 
     const sparse = computeExtractionCompleteness({
@@ -86,6 +108,13 @@ describe("computeExtractionCompleteness", () => {
       services: [],
       targetCustomers: [],
       estimatedCompanySize: "unknown",
+      city: "unknown",
+      country: "unknown",
+      decisionMaker: "unknown",
+      linkedInUrl: null,
+      xUrl: null,
+      email: null,
+      revenue: "unknown",
     });
 
     expect(rich).toBeGreaterThan(sparse);

@@ -15,15 +15,9 @@ const criteria = {
   employeeRange: "50-200",
 };
 
-const extractedProfile = {
-  companyName: "Acme Logistics Oy",
-  description: "Freight and warehousing provider established since 1998 in Finland.",
-  industry: "logistics",
-  products: ["Tracking Platform"],
-  services: ["Freight forwarding", "Warehousing"],
-  targetCustomers: ["Manufacturers"],
-  estimatedCompanySize: "100-200",
-};
+import { createExtractedCompanyProfile } from "../../helpers/extracted-company.fixture.js";
+
+const extractedProfile = createExtractedCompanyProfile();
 
 function createDependencies(
   overrides: Partial<SearchOrchestratorDependencies> = {},
