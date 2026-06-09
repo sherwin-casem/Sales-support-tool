@@ -18,10 +18,6 @@ export class DomainBlocklistService {
 
 export const domainBlocklistService = new DomainBlocklistService();
 
-export function isBlockedDiscoveryDomain(domain: string): boolean {
-  return domainBlocklistService.isBlocked(domain);
-}
-
 export function normalizeDomain(input: string): string | null {
   try {
     const withProtocol = input.includes("://") ? input : `https://${input}`;

@@ -19,7 +19,6 @@
     "db:reset": "prisma migrate reset",
     "test": "vitest run",
     "test:watch": "vitest",
-    "example:text-cleaning": "tsx examples/text-cleaning.example.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
@@ -48,7 +47,6 @@
     "playwright": "^1.52.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "undici": "^6.26.0",
     "zod": "^3.25.67"
   }
 }

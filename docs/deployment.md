@@ -23,8 +23,7 @@ flowchart TB
   end
 
   subgraph external [External Services]
-    OpenAI[OpenAI API]
-    Discovery[DuckDuckGo / Wikidata]
+    OpenAI[OpenAI API<br/>discovery + extraction + scoring]
   end
 
   subgraph worker [Recommended: Crawler Worker]
@@ -35,7 +34,6 @@ flowchart TB
   Next --> Fn
   Fn --> PG
   Fn --> OpenAI
-  Fn --> Discovery
   Fn -.->|HTTP job dispatch| Crawler
   Crawler --> PG
 ```

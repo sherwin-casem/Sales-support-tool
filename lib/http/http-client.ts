@@ -1,5 +1,3 @@
-import { ProxyAgent, type Dispatcher } from "undici";
-
 export interface HttpResponse {
   ok: boolean;
   status: number;
@@ -8,43 +6,17 @@ export interface HttpResponse {
 
 export interface HttpClient {
   get(url: string, init?: RequestInit): Promise<HttpResponse>;
-  post(url: string, body: URLSearchParams, init?: RequestInit): Promise<HttpResponse>;
 }
 
 export interface FetchHttpClientOptions {
-  proxyUrl?: string;
   defaultTimeoutMs?: number;
 }
 
 export class FetchHttpClient implements HttpClient {
-  private readonly dispatcher?: Dispatcher;
-
-  constructor(private readonly options: FetchHttpClientOptions = {}) {
-    if (options.proxyUrl) {
-      this.dispatcher = new ProxyAgent(options.proxyUrl);
-    }
-  }
+  constructor(private readonly options: FetchHttpClientOptions = {}) {}
 
   async get(url: string, init?: RequestInit): Promise<HttpResponse> {
     const response = await fetch(url, this.buildRequestInit(init));
-    return wrapResponse(response);
-  }
-
-  async post(
-    url: string,
-    body: URLSearchParams,
-    init?: RequestInit,
-  ): Promise<HttpResponse> {
-    const response = await fetch(url, {
-      ...this.buildRequestInit(init),
-      method: "POST",
-      headers: mergeHeaders(
-        { "Content-Type": "application/x-www-form-urlencoded" },
-        init?.headers,
-      ),
-      body: body.toString(),
-    });
-
     return wrapResponse(response);
   }
 
@@ -59,7 +31,6 @@ export class FetchHttpClient implements HttpClient {
       ...init,
       signal,
       headers: mergeHeaders(undefined, init?.headers),
-      ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
     };
   }
 }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   escapePromptLiteral,
-  sanitizeSparqlLiteral,
   stripPromptInjectionPatterns,
   wrapUntrustedContent,
 } from "@/lib/security/prompt-safety.js";
@@ -34,11 +33,6 @@ describe("security/prompt-safety", () => {
     expect(wrapUntrustedContent("query", "logistics in Finland")).toBe(
       "<untrusted_query>\nlogistics in Finland\n</untrusted_query>",
     );
-  });
-
-  it("rejects unsafe SPARQL industry tokens", () => {
-    expect(() => sanitizeSparqlLiteral('logistics"; DROP ?company .')).toThrow();
-    expect(sanitizeSparqlLiteral("logistics")).toBe("logistics");
   });
 });
 
