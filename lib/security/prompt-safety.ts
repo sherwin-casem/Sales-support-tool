@@ -30,19 +30,3 @@ export function stripPromptInjectionPatterns(value: string): string {
 
   return result.replace(/"{3,}/g, '""');
 }
-
-export function sanitizeSparqlLiteral(value: string): string {
-  const normalized = value.trim().toLowerCase();
-
-  if (!/^[a-z0-9\s\-]+$/i.test(normalized)) {
-    throw new Error("Industry value contains unsupported characters");
-  }
-
-  return normalized.slice(0, 64).replace(/"/g, "");
-}
-
-export function assertValidWikidataQid(qid: string): void {
-  if (!/^Q\d+$/i.test(qid)) {
-    throw new Error("Invalid Wikidata QID");
-  }
-}

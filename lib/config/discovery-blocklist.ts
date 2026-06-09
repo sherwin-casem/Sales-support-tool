@@ -29,9 +29,3 @@ export const DISCOVERY_BLOCKED_DOMAINS = [
   "bbb.org",
   "trustpilot.com",
 ] as const;
-
-export function buildDiscoverySiteExclusions(limit = 12): string {
-  return DISCOVERY_BLOCKED_DOMAINS.slice(0, limit)
-    .map((domain) => `-site:${domain}`)
-    .join(" ");
-}

@@ -1,6 +1,47 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type SearchJobStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { vi } from "vitest";
+import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
+import type {
+  CompanyRecord,
+  UpsertCompaniesResult,
+} from "@/types/repositories/company.repository.types.js";
+
+type MockFn = ReturnType<typeof vi.fn>;
+
+export type MockPrismaClient = PrismaClient & {
+  company: {
+    findUnique: MockFn;
+    upsert: MockFn;
+    update: MockFn;
+  };
+  companyProfile: {
+    findFirst: MockFn;
+    findUnique: MockFn;
+    create: MockFn;
+    findMany: MockFn;
+  };
+  searchJob: {
+    create: MockFn;
+    findUnique: MockFn;
+    findMany: MockFn;
+    findFirst: MockFn;
+    update: MockFn;
+    updateMany: MockFn;
+    count: MockFn;
+  };
+  searchResult: {
+    create: MockFn;
+    findMany: MockFn;
+    findUnique: MockFn;
+    update: MockFn;
+  };
+  leadScore: {
+    findUnique: MockFn;
+    upsert: MockFn;
+  };
+  $transaction: MockFn;
+};
 
 export function createMockCompany(overrides: Partial<{
   id: string;
@@ -55,26 +96,64 @@ export function createMockCompanyProfile(overrides: Partial<{
   };
 }
 
-export function createMockSearchJob(overrides: Partial<{ id: string }> = {}) {
+export function createMockSearchJob(
+  overrides: Partial<{
+    id: string;
+    userId: string;
+    query: string;
+    status: SearchJobStatus;
+    criteria: Record<string, unknown>;
+    companyLimit: number;
+    errorMessage: string | null;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }> = {},
+) {
   const now = new Date("2026-06-07T12:00:00.000Z");
 
   return {
     id: overrides.id ?? "00000000-0000-4000-8000-000000000030",
-    userId: "00000000-0000-4000-8000-000000000001",
-    query: "Find logistics companies in Finland",
-    criteria: {
+    userId: overrides.userId ?? "00000000-0000-4000-8000-000000000001",
+    query: overrides.query ?? "Find logistics companies in Finland",
+    criteria: overrides.criteria ?? {
       industry: "logistics",
       location: "Finland",
       employeeRange: "50-200",
     },
-    status: "PENDING",
-    companyLimit: 25,
-    errorMessage: null,
-    startedAt: null,
-    completedAt: null,
-    createdAt: now,
-    updatedAt: now,
+    status: overrides.status ?? "PENDING",
+    companyLimit: overrides.companyLimit ?? 25,
+    errorMessage: overrides.errorMessage ?? null,
+    startedAt: overrides.startedAt ?? null,
+    completedAt: overrides.completedAt ?? null,
+    createdAt: overrides.createdAt ?? now,
+    updatedAt: overrides.updatedAt ?? now,
   };
+}
+
+export function toCompanyRecord(
+  company: ReturnType<typeof createMockCompany>,
+): CompanyRecord {
+  return {
+    id: company.id,
+    domain: company.domain,
+    normalizedDomain: company.normalizedDomain,
+    name: company.name,
+    websiteUrl: company.websiteUrl,
+    firstSeenAt: company.firstSeenAt,
+    lastCrawledAt: company.lastCrawledAt,
+    createdAt: company.createdAt,
+    updatedAt: company.updatedAt,
+  };
+}
+
+export function createMockCompanyRepository(
+  upsertResult: UpsertCompaniesResult,
+): CompanyRepository {
+  return {
+    upsertManyByDomain: vi.fn().mockResolvedValue(upsertResult),
+  } as unknown as CompanyRepository;
 }
 
 export function createMockSearchResult(overrides: Partial<{
@@ -90,7 +169,7 @@ export function createMockSearchResult(overrides: Partial<{
     companyId: overrides.companyId ?? "00000000-0000-4000-8000-000000000010",
     stage: "DISCOVERED",
     rank: 1,
-    discoverySource: "wikidata",
+    discoverySource: "discovery_agent",
     discoveryUrl: "https://acme.fi",
     stageError: null,
     discoveredAt: now,
@@ -193,35 +272,7 @@ export function createMockPrismaClient() {
     ),
   };
 
-  return client as unknown as PrismaClient & {
-    company: {
-      findUnique: ReturnType<typeof vi.fn>;
-      upsert: ReturnType<typeof vi.fn>;
-      update: ReturnType<typeof vi.fn>;
-    };
-    companyProfile: {
-      findFirst: ReturnType<typeof vi.fn>;
-      findUnique: ReturnType<typeof vi.fn>;
-      create: ReturnType<typeof vi.fn>;
-      findMany: ReturnType<typeof vi.fn>;
-    };
-    searchJob: {
-      create: ReturnType<typeof vi.fn>;
-      findUnique: ReturnType<typeof vi.fn>;
-      update: ReturnType<typeof vi.fn>;
-    };
-    searchResult: {
-      create: ReturnType<typeof vi.fn>;
-      findMany: ReturnType<typeof vi.fn>;
-      findUnique: ReturnType<typeof vi.fn>;
-      update: ReturnType<typeof vi.fn>;
-    };
-    leadScore: {
-      findUnique: ReturnType<typeof vi.fn>;
-      upsert: ReturnType<typeof vi.fn>;
-    };
-    $transaction: ReturnType<typeof vi.fn>;
-  };
+  return client as unknown as MockPrismaClient;
 }
 
 export function createUniqueConstraintError(): Prisma.PrismaClientKnownRequestError {
