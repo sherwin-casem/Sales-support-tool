@@ -130,18 +130,11 @@ Set `CRAWLER_SEARCH_CONCURRENCY`, `CRAWLER_MAX_CONTEXTS`, and `CRAWLER_GLOBAL_CO
 
 Both stages call OpenAI. Keep concurrency modest to avoid rate limits; start at `3` and raise only if your API tier allows it.
 
-### Discovery (DuckDuckGo / Wikidata)
+### Discovery (OpenAI web search)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DISCOVERY_DDG_MODE` | `auto` | `http` \| `playwright` \| `auto` — HTTP first, Playwright fallback when blocked |
-| `DISCOVERY_DDG_USER_AGENT` | Chrome desktop UA | Browser-like user agent for DuckDuckGo requests |
-| `DISCOVERY_DDG_TIMEOUT_MS` | `15000` | DuckDuckGo request timeout (HTTP and Playwright) |
-| `DISCOVERY_HTTP_PROXY` | _(unset)_ | Optional HTTP proxy for discovery requests on datacenter/VPS IPs |
+Company discovery uses the OpenAI Responses API with the built-in **web search** tool. The full natural-language search query is sent to the model (industry and location are optional hints from the query parser). No DuckDuckGo, Wikidata, or HTTP proxy configuration is required.
 
-On datacenter IPs, DuckDuckGo often returns a captcha page to plain HTTP clients. Use `auto` mode (default) so Playwright is attempted after HTTP is blocked. If both fail, set `DISCOVERY_HTTP_PROXY` to a residential or allowed egress proxy.
-
-Playwright-based discovery fallback has the same Vercel constraint as the crawler: it requires a worker/runtime with Chromium, not serverless functions alone.
+Use a web-search-capable model via `OPENAI_MODEL` (for example `gpt-4o-mini` or `gpt-4o`). Discovery shares the same API key as extraction and scoring.
 
 ### Neon / Vercel Postgres connection strings
 

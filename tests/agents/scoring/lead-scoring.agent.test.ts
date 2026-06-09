@@ -41,7 +41,10 @@ describe("LeadScoringAgent", () => {
     );
 
     createStructuredCompletion = vi.fn();
-    const openai: OpenAIClientPort = { createStructuredCompletion };
+    const openai: OpenAIClientPort = {
+      createStructuredCompletion,
+      createWebDiscoveryCompletion: vi.fn(),
+    };
 
     agent = new LeadScoringAgent(openai, {
       model: "gpt-4o",
@@ -185,6 +188,7 @@ describe("LeadScoringAgent", () => {
               "Custom weights were applied while scoring this lead for logistics companies in Finland with aligned employee count.",
           }),
         ),
+        createWebDiscoveryCompletion: vi.fn(),
       },
       {
         model: "gpt-4o",

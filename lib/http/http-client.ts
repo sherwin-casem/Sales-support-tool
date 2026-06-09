@@ -1,5 +1,4 @@
 import { ProxyAgent, type Dispatcher } from "undici";
-import type { DiscoveryConfig } from "@/lib/config/discovery.config.js";
 
 export interface HttpResponse {
   ok: boolean;
@@ -100,14 +99,3 @@ function toRecord(headers?: HeadersInit): Record<string, string> {
 }
 
 export const httpClient = new FetchHttpClient();
-
-export function createDiscoveryHttpClient(config: DiscoveryConfig): HttpClient {
-  return new FetchHttpClient({
-    proxyUrl: config.DISCOVERY_HTTP_PROXY,
-    defaultTimeoutMs: config.DISCOVERY_DDG_TIMEOUT_MS,
-  });
-}
-
-export function createWikidataHttpClient(): HttpClient {
-  return new FetchHttpClient({ defaultTimeoutMs: 30_000 });
-}

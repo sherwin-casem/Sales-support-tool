@@ -1,7 +1,4 @@
-export type DiscoveryErrorCode =
-  | "INVALID_INPUT"
-  | "ALL_SOURCES_FAILED"
-  | "DISCOVERY_FAILED";
+export type DiscoveryErrorCode = "INVALID_INPUT" | "DISCOVERY_FAILED";
 
 export class DiscoveryError extends Error {
   readonly code: DiscoveryErrorCode;

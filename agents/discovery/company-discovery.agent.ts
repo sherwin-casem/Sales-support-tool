@@ -1,37 +1,51 @@
 import type { Agent } from "@/agents/base/agent.interface.js";
+import { PromptLoader } from "@/agents/shared/prompt-loader.js";
+import type { OpenAIClientPort } from "@/lib/config/openai.client.js";
 import { aiLogger } from "@/lib/logging/logger.js";
-import { CompanyDiscoveryInputSchema } from "@/lib/validations/company-discovery.schema.js";
+import { wrapUntrustedContent } from "@/lib/security/prompt-safety.js";
+import {
+  CompanyDiscoveryInputSchema,
+  DISCOVERED_COMPANY_LIST_JSON_SCHEMA,
+  DiscoveredCompanyListResponseSchema,
+} from "@/lib/validations/company-discovery.schema.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import { companyDeduplicatorService } from "@/services/domain/company/company-deduplicator.service.js";
-import { isGenericIndustry } from "@/services/domain/discovery/industry-terms.service.js";
-import { locationResolverService } from "@/services/domain/discovery/location-resolver.service.js";
-import {
-  DiscoverySourceError,
-  type DiscoverySource,
-} from "@/services/infrastructure/discovery/sources/discovery-source.interface.js";
 import { DiscoveryError } from "@/types/agents/discovery-error.types.js";
-import type {
-  CompanyDiscoveryInput,
-  DiscoveredCompany,
-  DiscoveryCriteria,
-  RawDiscoveryCandidate,
+import {
+  COMPANY_DISCOVERY_PROMPT_VERSION,
+  type CompanyDiscoveryInput,
+  type DiscoveredCompany,
+  type RawDiscoveryCandidate,
 } from "@/types/agents/company-discovery.types.js";
 
+const SYSTEM_PROMPT_PATH = "discovery/company-discovery.system.md";
+const USER_PROMPT_PATH = "discovery/company-discovery.user.md";
+const SCHEMA_NAME = "discovered_companies";
+const DISCOVERY_SOURCE = "openai_web_search";
+const DEFAULT_CONFIDENCE = 0.85;
+const MAX_ATTEMPTS = 2;
+
 export interface CompanyDiscoveryAgentOptions {
-  sources: DiscoverySource[];
-  locationResolver?: typeof locationResolverService;
+  model: string;
+  promptLoader?: PromptLoader;
+  maxAttempts?: number;
   deduplicator?: typeof companyDeduplicatorService;
+  searchContextSize?: "low" | "medium" | "high";
 }
 
 export class CompanyDiscoveryAgent
   implements Agent<CompanyDiscoveryInput, DiscoveredCompany[], DiscoveryError>
 {
-  private readonly locationResolver: typeof locationResolverService;
+  private readonly promptLoader: PromptLoader;
+  private readonly maxAttempts: number;
   private readonly deduplicator: typeof companyDeduplicatorService;
 
-  constructor(private readonly options: CompanyDiscoveryAgentOptions) {
-    this.locationResolver =
-      options.locationResolver ?? locationResolverService;
+  constructor(
+    private readonly openai: OpenAIClientPort,
+    private readonly options: CompanyDiscoveryAgentOptions,
+  ) {
+    this.promptLoader = options.promptLoader ?? new PromptLoader();
+    this.maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
     this.deduplicator = options.deduplicator ?? companyDeduplicatorService;
   }
 
@@ -50,197 +64,145 @@ export class CompanyDiscoveryAgent
       );
     }
 
-    const locationContext = this.locationResolver.resolve(parsedInput.data.location);
-    const criteria: DiscoveryCriteria = {
-      industry: parsedInput.data.industry,
-      location: parsedInput.data.location,
-      locationContext,
-      limit: parsedInput.data.limit,
-    };
+    let lastValidationError: DiscoveryError | undefined;
 
-    const tier1Sources = this.options.sources.filter((source) => source.tier === 1);
-    const tier2Sources = this.options.sources.filter((source) => source.tier === 2);
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      const completionResult = await this.requestCompletion(parsedInput.data);
 
-    const tier1Results = await this.runSources(tier1Sources, criteria);
-    let candidates = tier1Results.candidates;
-    let sourceErrors = tier1Results.errors;
-    let sourceStats = [...tier1Results.stats];
-    let sourcesAttempted = tier1Sources.length;
+      if (!completionResult.ok) {
+        if (attempt === this.maxAttempts) {
+          return completionResult;
+        }
 
-    if (candidates.length < criteria.limit && tier2Sources.length > 0) {
-      const tier2Results = await this.runSources(tier2Sources, criteria);
-      candidates = candidates.concat(tier2Results.candidates);
-      sourceErrors = sourceErrors.concat(tier2Results.errors);
-      sourceStats = sourceStats.concat(tier2Results.stats);
-      sourcesAttempted += tier2Sources.length;
-    }
-
-    let deduplicated = this.deduplicator.deduplicate(candidates);
-    let companies = deduplicated.slice(0, criteria.limit).map(toDiscoveredCompany);
-
-    if (companies.length === 0 && !isGenericIndustry(criteria.industry)) {
-      const relaxedCriteria: DiscoveryCriteria = {
-        ...criteria,
-        industry: "unknown",
-      };
-
-      aiLogger.info("CompanyDiscoveryAgent retrying with generic industry", {
-        location: criteria.location,
-        originalIndustry: criteria.industry,
-      });
-
-      const relaxedTier1 = await this.runSources(tier1Sources, relaxedCriteria);
-      candidates = relaxedTier1.candidates;
-      sourceErrors = sourceErrors.concat(relaxedTier1.errors);
-      sourceStats = sourceStats.concat(relaxedTier1.stats);
-      sourcesAttempted += tier1Sources.length;
-
-      if (candidates.length < criteria.limit && tier2Sources.length > 0) {
-        const relaxedTier2 = await this.runSources(tier2Sources, relaxedCriteria);
-        candidates = candidates.concat(relaxedTier2.candidates);
-        sourceErrors = sourceErrors.concat(relaxedTier2.errors);
-        sourceStats = sourceStats.concat(relaxedTier2.stats);
-        sourcesAttempted += tier2Sources.length;
+        continue;
       }
 
-      deduplicated = this.deduplicator.deduplicate(candidates);
-      companies = deduplicated.slice(0, criteria.limit).map(toDiscoveredCompany);
+      const validated = this.validateOutput(completionResult.value, parsedInput.data.limit);
+
+      if (validated.ok) {
+        aiLogger.info("CompanyDiscoveryAgent.execute completed", {
+          queryLength: parsedInput.data.query.length,
+          industryHint: parsedInput.data.industry ?? "not specified",
+          locationHint: parsedInput.data.location ?? "not specified",
+          limit: parsedInput.data.limit,
+          resultCount: validated.value.length,
+          attempt,
+          promptVersion: COMPANY_DISCOVERY_PROMPT_VERSION,
+        });
+
+        return validated;
+      }
+
+      lastValidationError = validated.error;
+
+      if (attempt === this.maxAttempts) {
+        return err(validated.error);
+      }
     }
 
-    if (
-      companies.length === 0 &&
-      sourcesAttempted > 0 &&
-      sourceErrors.length === sourcesAttempted
-    ) {
+    return err(
+      lastValidationError ??
+        new DiscoveryError("DISCOVERY_FAILED", "Failed to discover companies"),
+    );
+  }
+
+  private async requestCompletion(
+    input: CompanyDiscoveryInputValidated,
+  ): Promise<Result<string, DiscoveryError>> {
+    try {
+      const [systemPrompt, userPrompt] = await Promise.all([
+        this.promptLoader.load(SYSTEM_PROMPT_PATH),
+        this.promptLoader.loadTemplate(USER_PROMPT_PATH, {
+          query: wrapUntrustedContent("user_query", input.query),
+          limit: String(input.limit),
+          industryHint: input.industry ?? "not specified",
+          locationHint: input.location ?? "not specified",
+        }),
+      ]);
+
+      const content = await this.openai.createWebDiscoveryCompletion({
+        model: this.options.model,
+        instructions: systemPrompt,
+        input: userPrompt,
+        schemaName: SCHEMA_NAME,
+        schema: DISCOVERED_COMPANY_LIST_JSON_SCHEMA,
+        searchContextSize: this.options.searchContextSize,
+      });
+
+      if (!content.trim()) {
+        return err(new DiscoveryError("DISCOVERY_FAILED", "OpenAI returned empty content"));
+      }
+
+      return ok(content);
+    } catch (error) {
       return err(
         new DiscoveryError(
-          "ALL_SOURCES_FAILED",
-          "All discovery sources failed to return results",
-          sourceErrors,
+          "DISCOVERY_FAILED",
+          error instanceof Error ? error.message : "OpenAI web discovery request failed",
+          error,
+        ),
+      );
+    }
+  }
+
+  private validateOutput(
+    content: string,
+    limit: number,
+  ): Result<DiscoveredCompany[], DiscoveryError> {
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(content);
+    } catch (error) {
+      return err(
+        new DiscoveryError(
+          "DISCOVERY_FAILED",
+          "OpenAI returned invalid JSON for discovered companies",
+          error,
         ),
       );
     }
 
-    const sourceSummary = summarizeDiscoverySources(sourceStats);
+    const validated = DiscoveredCompanyListResponseSchema.safeParse(parsed);
 
-    if (companies.length === 0) {
-      aiLogger.warn("CompanyDiscoveryAgent found no companies", {
-        industry: criteria.industry,
-        location: criteria.location,
-        sourceCount: this.options.sources.length,
-        candidateCount: candidates.length,
-        failedSources: sourceErrors.length,
-        ...sourceSummary,
-      });
-    } else {
-      aiLogger.info("CompanyDiscoveryAgent.execute completed", {
-        industry: criteria.industry,
-        location: criteria.location,
-        sourceCount: this.options.sources.length,
-        candidateCount: candidates.length,
-        resultCount: companies.length,
-        failedSources: sourceErrors.length,
-        ...sourceSummary,
+    if (!validated.success) {
+      return err(
+        new DiscoveryError(
+          "DISCOVERY_FAILED",
+          validated.error.issues.map((issue) => issue.message).join("; "),
+          validated.error,
+        ),
+      );
+    }
+
+    const candidates: RawDiscoveryCandidate[] = validated.data.companies.map((company) => ({
+      companyName: company.companyName,
+      website: company.website,
+      source: DISCOVERY_SOURCE,
+      confidence: DEFAULT_CONFIDENCE,
+    }));
+
+    const deduplicated = this.deduplicator.deduplicate(candidates);
+
+    if (deduplicated.length === 0) {
+      aiLogger.warn("CompanyDiscoveryAgent found no companies after deduplication", {
+        rawCount: validated.data.companies.length,
+        limit,
       });
     }
 
-    return ok(companies);
-  }
-
-  private async runSources(
-    sources: DiscoverySource[],
-    criteria: DiscoveryCriteria,
-  ): Promise<{
-    candidates: RawDiscoveryCandidate[];
-    failedSources: number;
-    errors: DiscoverySourceError[];
-    stats: DiscoverySourceRunStat[];
-  }> {
-    if (sources.length === 0) {
-      return { candidates: [], failedSources: 0, errors: [], stats: [] };
-    }
-
-    const results = await Promise.all(
-      sources.map(async (source) => {
-        try {
-          const candidates = await source.discover(criteria);
-          aiLogger.info("Discovery source completed", {
-            source: source.name,
-            count: candidates.length,
-          });
-          return {
-            source: source.name,
-            candidates,
-            error: null,
-            stat: {
-              source: source.name,
-              count: candidates.length,
-              failed: false,
-            } satisfies DiscoverySourceRunStat,
-          };
-        } catch (error) {
-          const sourceError =
-            error instanceof DiscoverySourceError
-              ? error
-              : new DiscoverySourceError(
-                  source.name,
-                  error instanceof Error ? error.message : "Discovery source failed",
-                  error,
-                );
-
-          aiLogger.warn("Discovery source failed", {
-            source: source.name,
-            message: sourceError.message,
-          });
-
-          return {
-            source: source.name,
-            candidates: [],
-            error: sourceError,
-            stat: {
-              source: source.name,
-              count: 0,
-              failed: true,
-            } satisfies DiscoverySourceRunStat,
-          };
-        }
-      }),
+    return ok(
+      deduplicated.slice(0, limit).map((candidate) => ({
+        companyName: candidate.companyName,
+        website: candidate.website,
+      })),
     );
-
-    return {
-      candidates: results.flatMap((result) => result.candidates),
-      failedSources: results.filter((result) => result.error !== null).length,
-      errors: results
-        .map((result) => result.error)
-        .filter((error): error is DiscoverySourceError => error !== null),
-      stats: results.map((result) => result.stat),
-    };
   }
 }
 
-interface DiscoverySourceRunStat {
-  source: string;
-  count: number;
-  failed: boolean;
-}
-
-function summarizeDiscoverySources(stats: DiscoverySourceRunStat[]): Record<string, number> {
-  const summary: Record<string, number> = {};
-
-  for (const stat of stats) {
-    summary[stat.source] = (summary[stat.source] ?? 0) + stat.count;
-  }
-
-  summary.failedSources = stats.filter((stat) => stat.failed).length;
-  summary.duckduckgoCount = summary.duckduckgo_html ?? 0;
-  summary.wikidataCount = summary.wikidata ?? 0;
-
-  return summary;
-}
-
-function toDiscoveredCompany(candidate: RawDiscoveryCandidate): DiscoveredCompany {
-  return {
-    companyName: candidate.companyName,
-    website: candidate.website,
-  };
-}
+type CompanyDiscoveryInputValidated = {
+  query: string;
+  industry?: string;
+  location?: string;
+  limit: number;
+};

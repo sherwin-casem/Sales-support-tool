@@ -9,9 +9,21 @@ export interface StructuredChatCompletionParams {
   temperature?: number;
 }
 
+export interface WebDiscoveryCompletionParams {
+  model: string;
+  instructions: string;
+  input: string;
+  schemaName: string;
+  schema: Record<string, unknown>;
+  searchContextSize?: "low" | "medium" | "high";
+}
+
 export interface OpenAIClientPort {
   createStructuredCompletion(
     params: StructuredChatCompletionParams,
+  ): Promise<string>;
+  createWebDiscoveryCompletion(
+    params: WebDiscoveryCompletionParams,
   ): Promise<string>;
 }
 
@@ -43,6 +55,38 @@ export class OpenAIClient implements OpenAIClientPort {
 
     if (!content) {
       throw new Error("OpenAI returned an empty completion");
+    }
+
+    return content;
+  }
+
+  async createWebDiscoveryCompletion(
+    params: WebDiscoveryCompletionParams,
+  ): Promise<string> {
+    const response = await this.client.responses.create({
+      model: params.model,
+      instructions: params.instructions,
+      input: params.input,
+      tools: [
+        {
+          type: "web_search",
+          search_context_size: params.searchContextSize ?? "medium",
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: params.schemaName,
+          strict: true,
+          schema: params.schema,
+        },
+      },
+    });
+
+    const content = response.output_text;
+
+    if (!content?.trim()) {
+      throw new Error("OpenAI returned an empty web discovery response");
     }
 
     return content;
