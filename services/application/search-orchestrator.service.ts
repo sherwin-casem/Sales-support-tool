@@ -1,5 +1,8 @@
 import { SearchJobStatus, SearchResultStage } from "@prisma/client";
+import { getCrawlerConfig } from "@/lib/config/crawler.config.js";
+import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
 import { logger } from "@/lib/logging/logger.js";
+import { runWithConcurrency } from "@/lib/utils/concurrency.js";
 import { withRetry } from "@/lib/utils/retry.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
@@ -44,6 +47,17 @@ export interface SearchOrchestratorDependencies {
 export interface SearchOrchestratorOptions {
   maxAttempts?: number;
   initialDelayMs?: number;
+  crawlConcurrency?: number;
+  extractionConcurrency?: number;
+  scoringConcurrency?: number;
+}
+
+interface StageOutcome {
+  crawled: number;
+  extracted: number;
+  scored: number;
+  failed: number;
+  failures: SearchStageFailure[];
 }
 
 const DEFAULT_MAX_ATTEMPTS = 2;
@@ -52,13 +66,24 @@ const DEFAULT_INITIAL_DELAY_MS = 500;
 export class SearchOrchestrator {
   private readonly maxAttempts: number;
   private readonly initialDelayMs: number;
+  private readonly crawlConcurrency: number;
+  private readonly extractionConcurrency: number;
+  private readonly scoringConcurrency: number;
 
   constructor(
     private readonly deps: SearchOrchestratorDependencies,
     options: SearchOrchestratorOptions = {},
   ) {
+    const pipelineConfig = getPipelineConfig();
+
     this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     this.initialDelayMs = options.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
+    this.crawlConcurrency =
+      options.crawlConcurrency ?? getCrawlerConfig().CRAWLER_SEARCH_CONCURRENCY;
+    this.extractionConcurrency =
+      options.extractionConcurrency ?? pipelineConfig.SEARCH_EXTRACTION_CONCURRENCY;
+    this.scoringConcurrency =
+      options.scoringConcurrency ?? pipelineConfig.SEARCH_SCORING_CONCURRENCY;
   }
 
   async run(
@@ -165,9 +190,19 @@ export class SearchOrchestrator {
 
       const searchResults = await this.deps.searchRepository.findResultsByJobId(searchJobId);
 
-      for (const searchResult of searchResults) {
-        await this.processCrawl(searchResult, summary, failures);
-      }
+      logger.info("SearchOrchestrator crawl stage started", {
+        searchJobId,
+        companyCount: searchResults.length,
+        crawlConcurrency: this.crawlConcurrency,
+      });
+
+      const crawlOutcomes = await runWithConcurrency(
+        searchResults,
+        this.crawlConcurrency,
+        (searchResult) => this.processCrawl(searchResult),
+      );
+
+      mergeStageOutcomes(summary, failures, crawlOutcomes);
 
       await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.EXTRACTING);
 
@@ -175,9 +210,19 @@ export class SearchOrchestrator {
         stage: SearchResultStage.CRAWLED,
       });
 
-      for (const searchResult of crawledResults) {
-        await this.processExtraction(searchResult, summary, failures);
-      }
+      logger.info("SearchOrchestrator extraction stage started", {
+        searchJobId,
+        companyCount: crawledResults.length,
+        extractionConcurrency: this.extractionConcurrency,
+      });
+
+      const extractionOutcomes = await runWithConcurrency(
+        crawledResults,
+        this.extractionConcurrency,
+        (searchResult) => this.processExtraction(searchResult),
+      );
+
+      mergeStageOutcomes(summary, failures, extractionOutcomes);
 
       await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.SCORING);
 
@@ -185,9 +230,19 @@ export class SearchOrchestrator {
         stage: SearchResultStage.EXTRACTED,
       });
 
-      for (const searchResult of extractedResults) {
-        await this.processScoring(searchJobId, criteria, searchResult, summary, failures);
-      }
+      logger.info("SearchOrchestrator scoring stage started", {
+        searchJobId,
+        companyCount: extractedResults.length,
+        scoringConcurrency: this.scoringConcurrency,
+      });
+
+      const scoringOutcomes = await runWithConcurrency(
+        extractedResults,
+        this.scoringConcurrency,
+        (searchResult) => this.processScoring(searchJobId, criteria, searchResult),
+      );
+
+      mergeStageOutcomes(summary, failures, scoringOutcomes);
 
       const finalStatus =
         summary.scored > 0
@@ -311,11 +366,7 @@ export class SearchOrchestrator {
     }
   }
 
-  private async processCrawl(
-    searchResult: SearchResultRecord,
-    summary: SearchOrchestrationSummary,
-    failures: SearchStageFailure[],
-  ): Promise<void> {
+  private async processCrawl(searchResult: SearchResultRecord): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId: searchResult.id,
       stage: SearchResultStage.CRAWLING,
@@ -324,21 +375,17 @@ export class SearchOrchestrator {
     const company = await this.deps.companyRepository.findById(searchResult.companyId);
 
     if (!company?.websiteUrl) {
-      summary.failed += 1;
-      failures.push({
-        searchResultId: searchResult.id,
-        companyId: searchResult.companyId,
-        stage: SearchResultStage.CRAWL_FAILED,
-        message: "Company website is missing",
-      });
-
       await this.deps.searchRepository.updateResultStage({
         searchResultId: searchResult.id,
         stage: SearchResultStage.CRAWL_FAILED,
         stageError: "Company website is missing",
       });
 
-      return;
+      return createStageFailure(SearchResultStage.CRAWL_FAILED, {
+        searchResultId: searchResult.id,
+        companyId: searchResult.companyId,
+        message: "Company website is missing",
+      }, { crawled: 0 });
     }
 
     const crawlResult = await this.runWithResultRetry(
@@ -352,21 +399,17 @@ export class SearchOrchestrator {
     );
 
     if (!crawlResult.ok) {
-      summary.failed += 1;
-      failures.push({
-        searchResultId: searchResult.id,
-        companyId: company.id,
-        stage: SearchResultStage.CRAWL_FAILED,
-        message: crawlResult.error.message,
-      });
-
       await this.deps.searchRepository.updateResultStage({
         searchResultId: searchResult.id,
         stage: SearchResultStage.CRAWL_FAILED,
         stageError: crawlResult.error.message,
       });
 
-      return;
+      return createStageFailure(SearchResultStage.CRAWL_FAILED, {
+        searchResultId: searchResult.id,
+        companyId: company.id,
+        message: crawlResult.error.message,
+      }, { crawled: 0 });
     }
 
     await this.deps.companyRepository.markCrawled(company.id);
@@ -377,14 +420,10 @@ export class SearchOrchestrator {
       stage: SearchResultStage.CRAWLED,
     });
 
-    summary.crawled += 1;
+    return { crawled: 1, extracted: 0, scored: 0, failed: 0, failures: [] };
   }
 
-  private async processExtraction(
-    searchResult: SearchResultRecord,
-    summary: SearchOrchestrationSummary,
-    failures: SearchStageFailure[],
-  ): Promise<void> {
+  private async processExtraction(searchResult: SearchResultRecord): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId: searchResult.id,
       stage: SearchResultStage.EXTRACTING,
@@ -393,34 +432,27 @@ export class SearchOrchestrator {
     const company = await this.deps.companyRepository.findById(searchResult.companyId);
 
     if (!company) {
-      await this.markExtractFailed(searchResult.id, searchResult.companyId, "Company not found", summary, failures);
-      return;
+      return this.markExtractFailed(searchResult.id, searchResult.companyId, "Company not found");
     }
 
     const crawlPayload = this.getCrawlPayload(searchResult.id);
 
     if (!crawlPayload) {
-      await this.markExtractFailed(
+      return this.markExtractFailed(
         searchResult.id,
         company.id,
         "Crawl payload not found for search result",
-        summary,
-        failures,
       );
-      return;
     }
 
     const llmContent = this.buildLlmContent(crawlPayload);
 
     if (llmContent.length < 100) {
-      await this.markExtractFailed(
+      return this.markExtractFailed(
         searchResult.id,
         company.id,
         "Insufficient cleaned content for extraction",
-        summary,
-        failures,
       );
-      return;
     }
 
     const extractionResult = await this.runWithResultRetry(
@@ -437,14 +469,11 @@ export class SearchOrchestrator {
     );
 
     if (!extractionResult.ok) {
-      await this.markExtractFailed(
+      return this.markExtractFailed(
         searchResult.id,
         company.id,
         extractionResult.error.message,
-        summary,
-        failures,
       );
-      return;
     }
 
     await this.deps.companyRepository.saveProfile({
@@ -464,16 +493,14 @@ export class SearchOrchestrator {
       stage: SearchResultStage.EXTRACTED,
     });
 
-    summary.extracted += 1;
+    return { crawled: 0, extracted: 1, scored: 0, failed: 0, failures: [] };
   }
 
   private async processScoring(
     searchJobId: string,
     criteria: ParsedQuery,
     searchResult: SearchResultRecord,
-    summary: SearchOrchestrationSummary,
-    failures: SearchStageFailure[],
-  ): Promise<void> {
+  ): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId: searchResult.id,
       stage: SearchResultStage.SCORING,
@@ -482,14 +509,11 @@ export class SearchOrchestrator {
     const profile = this.getExtractedProfile(searchResult.id);
 
     if (!profile) {
-      await this.markScoreFailed(
+      return this.markScoreFailed(
         searchResult.id,
         searchResult.companyId,
         "Extracted profile not found for scoring",
-        summary,
-        failures,
       );
-      return;
     }
 
     const scoringResult = await this.runWithResultRetry(
@@ -508,14 +532,11 @@ export class SearchOrchestrator {
     );
 
     if (!scoringResult.ok) {
-      await this.markScoreFailed(
+      return this.markScoreFailed(
         searchResult.id,
         searchResult.companyId,
         scoringResult.error.message,
-        summary,
-        failures,
       );
-      return;
     }
 
     await this.deps.leadRepository.saveScore({
@@ -530,7 +551,7 @@ export class SearchOrchestrator {
       scoredAt: new Date(scoringResult.value.meta.scoredAt),
     });
 
-    summary.scored += 1;
+    return { crawled: 0, extracted: 0, scored: 1, failed: 0, failures: [] };
   }
 
   private buildLlmContent(crawlResult: CrawlCompanyResult): string {
@@ -586,44 +607,36 @@ export class SearchOrchestrator {
     searchResultId: string,
     companyId: string,
     message: string,
-    summary: SearchOrchestrationSummary,
-    failures: SearchStageFailure[],
-  ): Promise<void> {
-    summary.failed += 1;
-    failures.push({
-      searchResultId,
-      companyId,
-      stage: SearchResultStage.EXTRACT_FAILED,
-      message,
-    });
-
+  ): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId,
       stage: SearchResultStage.EXTRACT_FAILED,
       stageError: message,
     });
+
+    return createStageFailure(SearchResultStage.EXTRACT_FAILED, {
+      searchResultId,
+      companyId,
+      message,
+    }, { extracted: 0 });
   }
 
   private async markScoreFailed(
     searchResultId: string,
     companyId: string,
     message: string,
-    summary: SearchOrchestrationSummary,
-    failures: SearchStageFailure[],
-  ): Promise<void> {
-    summary.failed += 1;
-    failures.push({
-      searchResultId,
-      companyId,
-      stage: SearchResultStage.SCORE_FAILED,
-      message,
-    });
-
+  ): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId,
       stage: SearchResultStage.SCORE_FAILED,
       stageError: message,
     });
+
+    return createStageFailure(SearchResultStage.SCORE_FAILED, {
+      searchResultId,
+      companyId,
+      message,
+    }, { scored: 0 });
   }
 
   private async failJob(searchJobId: string, message: string): Promise<void> {
@@ -650,6 +663,34 @@ export class SearchOrchestrator {
 
   private getExtractedProfile(searchResultId: string): ExtractedCompany | undefined {
     return this.extractedProfileByResultId.get(searchResultId);
+  }
+}
+
+function createStageFailure(
+  stage: SearchStageFailure["stage"],
+  failure: Pick<SearchStageFailure, "searchResultId" | "companyId" | "message">,
+  counts: Partial<Pick<StageOutcome, "crawled" | "extracted" | "scored">> = {},
+): StageOutcome {
+  return {
+    crawled: counts.crawled ?? 0,
+    extracted: counts.extracted ?? 0,
+    scored: counts.scored ?? 0,
+    failed: 1,
+    failures: [{ ...failure, stage }],
+  };
+}
+
+function mergeStageOutcomes(
+  summary: SearchOrchestrationSummary,
+  failures: SearchStageFailure[],
+  outcomes: StageOutcome[],
+): void {
+  for (const outcome of outcomes) {
+    summary.crawled += outcome.crawled;
+    summary.extracted += outcome.extracted;
+    summary.scored += outcome.scored;
+    summary.failed += outcome.failed;
+    failures.push(...outcome.failures);
   }
 }
 

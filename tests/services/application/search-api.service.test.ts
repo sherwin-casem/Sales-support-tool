@@ -42,6 +42,9 @@ function createDependencies(
     searchOrchestrator: {
       run: vi.fn().mockResolvedValue({ ok: true, value: {} }),
     } as unknown as SearchApiServiceDependencies["searchOrchestrator"],
+    staleSearchJobCleanup: {
+      cleanup: vi.fn().mockResolvedValue({ failedJobIds: [] }),
+    } as unknown as SearchApiServiceDependencies["staleSearchJobCleanup"],
     ...overrides,
   };
 }
@@ -65,6 +68,23 @@ describe("SearchApiService", () => {
       query: "logistics companies in Finland",
       companyLimit: 10,
     });
+  });
+
+  it("cleans up stale jobs before enforcing concurrency limits", async () => {
+    const cleanup = vi.fn().mockResolvedValue({
+      failedJobIds: ["00000000-0000-4000-8000-000000000099"],
+    });
+    const deps = createDependencies({
+      staleSearchJobCleanup: {
+        cleanup,
+      } as unknown as SearchApiServiceDependencies["staleSearchJobCleanup"],
+    });
+    const service = new SearchApiService(deps);
+
+    await service.createSearch(userId, { query: "logistics companies in Finland" });
+
+    expect(cleanup).toHaveBeenCalledWith({ userId });
+    expect(deps.searchRepository.countActiveJobsForUser).toHaveBeenCalledWith(userId);
   });
 
   it("starts background orchestration for accepted searches", async () => {

@@ -99,6 +99,8 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 | `API_RATE_LIMIT_MAX_REQUESTS` | `60` | Max requests per IP per window |
 | `API_SEARCH_RATE_LIMIT_MAX` | `5` | Max search POSTs per user per window |
 | `API_MAX_CONCURRENT_SEARCHES` | `2` | Active pipeline jobs per user |
+| `SEARCH_JOB_PENDING_STALE_MS` | `300000` (5 min) | Fail `PENDING` jobs older than this (orphaned after restart) |
+| `SEARCH_JOB_ACTIVE_STALE_MS` | `1200000` (20 min) | Fail in-progress jobs with no updates older than this |
 | `API_MAX_JSON_BODY_BYTES` | `16384` | Max request body size |
 
 ### Client (staging only)
@@ -112,9 +114,21 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CRAWLER_MAX_CONTEXTS` | `3` | Browser contexts |
-| `CRAWLER_GLOBAL_CONCURRENCY` | `3` | Parallel crawls |
+| `CRAWLER_GLOBAL_CONCURRENCY` | `3` | Parallel crawl operations (shared pool) |
+| `CRAWLER_SEARCH_CONCURRENCY` | `3` | Companies crawled in parallel per search job |
 | `CRAWLER_RESPECT_ROBOTS` | `true` | Honor robots.txt |
 | `CRAWLER_USER_AGENT` | Bot identifier | Include contact URL |
+
+Set `CRAWLER_SEARCH_CONCURRENCY`, `CRAWLER_MAX_CONTEXTS`, and `CRAWLER_GLOBAL_CONCURRENCY` to similar values (e.g. all `3`). Raising search concurrency without enough browser contexts causes queueing.
+
+### Search pipeline (OpenAI stages)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SEARCH_EXTRACTION_CONCURRENCY` | `3` | Companies extracted in parallel per search job |
+| `SEARCH_SCORING_CONCURRENCY` | `3` | Leads scored in parallel per search job |
+
+Both stages call OpenAI. Keep concurrency modest to avoid rate limits; start at `3` and raise only if your API tier allows it.
 
 ### Discovery (DuckDuckGo / Wikidata)
 

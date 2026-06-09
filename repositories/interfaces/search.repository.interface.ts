@@ -5,6 +5,7 @@ import type {
   AddDiscoveredCompaniesResult,
   CreateSearchJobInput,
   DiscoveredCompanyInput,
+  FailStaleSearchJobsInput,
   SearchJobRecord,
   SearchResultRecord,
   UpdateSearchResultStageInput,
@@ -48,4 +49,8 @@ export interface SearchRepository {
     tx?: DbClient,
   ): Promise<SearchJobRecord | null>;
   countActiveJobsForUser(userId: string, tx?: DbClient): Promise<number>;
+  failStaleJobs(
+    input: FailStaleSearchJobsInput,
+    tx?: DbClient,
+  ): Promise<SearchJobRecord[]>;
 }

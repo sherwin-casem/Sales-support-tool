@@ -173,7 +173,10 @@ export function createMockPrismaClient() {
     searchJob: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn(),
     },
     searchResult: {
       create: vi.fn(),

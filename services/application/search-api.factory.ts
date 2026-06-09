@@ -6,12 +6,14 @@ import {
   type SearchApiServiceDependencies,
 } from "@/services/application/search-api.service.js";
 import { getSearchOrchestrator } from "@/services/application/search-orchestrator.factory.js";
+import { getStaleSearchJobCleanupService } from "@/services/application/stale-search-job-cleanup.service.js";
 
 export function getSearchApiServiceDependencies(): SearchApiServiceDependencies {
   return {
     searchRepository: getSearchRepository(),
     leadRepository: getLeadRepository(),
     searchOrchestrator: getSearchOrchestrator(),
+    staleSearchJobCleanup: getStaleSearchJobCleanupService(),
     scheduleBackgroundTask: (task) => {
       after(task);
     },
@@ -19,10 +21,18 @@ export function getSearchApiServiceDependencies(): SearchApiServiceDependencies 
 }
 
 let cachedService: ReturnType<typeof createSearchApiService> | undefined;
+let startupCleanupScheduled = false;
 
 export function getSearchApiService() {
   if (!cachedService) {
     cachedService = createSearchApiService(getSearchApiServiceDependencies());
+  }
+
+  if (!startupCleanupScheduled) {
+    startupCleanupScheduled = true;
+    after(() => {
+      void getStaleSearchJobCleanupService().cleanup();
+    });
   }
 
   return cachedService;

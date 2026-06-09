@@ -58,3 +58,10 @@ export interface UpdateSearchResultStageInput {
   stageError?: string | null;
   completedAt?: Date | null;
 }
+
+export interface FailStaleSearchJobsInput {
+  pendingStaleBefore: Date;
+  activeStaleBefore: Date;
+  errorMessage: string;
+  userId?: string;
+}
