@@ -73,8 +73,8 @@ describe("process-search-results", () => {
     expect(filtered[0]?.company.domain).toBe("acme.fi");
   });
 
-  it("sorts results by score descending", () => {
-    const sorted = sortSearchResults(results, "score_desc");
+  it("sorts results by company name ascending", () => {
+    const sorted = sortSearchResults(results, "company_asc");
 
     expect(sorted.map((result) => result.searchResultId)).toEqual(["2", "1"]);
   });

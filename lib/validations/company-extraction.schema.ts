@@ -27,6 +27,24 @@ const stringArray = (field: string) =>
     .transform(dedupeStrings)
     .default([]);
 
+const unknownString = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .transform((value) => value.toLowerCase())
+  .default("unknown");
+
+const nullableUrl = z
+  .union([z.string().trim().url(), z.null()])
+  .optional()
+  .default(null);
+
+const nullableEmail = z
+  .union([z.string().trim().email(), z.null()])
+  .optional()
+  .default(null);
+
 export const ExtractedCompanySchema = z.object({
   companyName: z.string().trim().min(1, "companyName is required").max(500),
   description: z.string().trim().min(1, "description is required").max(2000),
@@ -49,6 +67,23 @@ export const ExtractedCompanySchema = z.object({
       (value) => EMPLOYEE_RANGE_PATTERN.test(value),
       "estimatedCompanySize must match 50-200, 100+, or unknown",
     ),
+  city: unknownString,
+  country: unknownString,
+  decisionMaker: z
+    .string()
+    .trim()
+    .min(1, "decisionMaker is required")
+    .max(500)
+    .default("unknown"),
+  linkedInUrl: nullableUrl,
+  xUrl: nullableUrl,
+  email: nullableEmail,
+  revenue: z
+    .string()
+    .trim()
+    .min(1, "revenue is required")
+    .max(200)
+    .default("unknown"),
 });
 
 export type ExtractedCompanyOutput = z.infer<typeof ExtractedCompanySchema>;
@@ -104,6 +139,34 @@ export const EXTRACTED_COMPANY_JSON_SCHEMA = {
       type: "string",
       description: "Employee range N-M, N+, or unknown",
     },
+    city: {
+      type: "string",
+      description: "Headquarters or primary city in lowercase; unknown if not found",
+    },
+    country: {
+      type: "string",
+      description: "Country in lowercase English; unknown if not found",
+    },
+    decisionMaker: {
+      type: "string",
+      description: "Named executive or decision maker with title if found; unknown if not found",
+    },
+    linkedInUrl: {
+      type: ["string", "null"],
+      description: "LinkedIn company or profile URL if found on the website; null otherwise",
+    },
+    xUrl: {
+      type: ["string", "null"],
+      description: "X (Twitter) profile URL if found on the website; null otherwise",
+    },
+    email: {
+      type: ["string", "null"],
+      description: "Public contact email if found on the website; null otherwise",
+    },
+    revenue: {
+      type: "string",
+      description: "Revenue range or figure with currency if stated; unknown if not found",
+    },
   },
   required: [
     "companyName",
@@ -113,6 +176,13 @@ export const EXTRACTED_COMPANY_JSON_SCHEMA = {
     "services",
     "targetCustomers",
     "estimatedCompanySize",
+    "city",
+    "country",
+    "decisionMaker",
+    "linkedInUrl",
+    "xUrl",
+    "email",
+    "revenue",
   ],
   additionalProperties: false,
 } as const;
@@ -120,13 +190,20 @@ export const EXTRACTED_COMPANY_JSON_SCHEMA = {
 export function computeExtractionCompleteness(profile: ExtractedCompanyOutput): number {
   let score = 0;
   const weights = {
-    companyName: 0.15,
-    description: 0.15,
-    industry: 0.15,
-    products: 0.15,
-    services: 0.15,
-    targetCustomers: 0.15,
-    estimatedCompanySize: 0.1,
+    companyName: 0.1,
+    description: 0.1,
+    industry: 0.1,
+    products: 0.08,
+    services: 0.08,
+    targetCustomers: 0.08,
+    estimatedCompanySize: 0.08,
+    city: 0.06,
+    country: 0.06,
+    decisionMaker: 0.08,
+    linkedInUrl: 0.06,
+    xUrl: 0.04,
+    email: 0.06,
+    revenue: 0.08,
   };
 
   if (profile.companyName) score += weights.companyName;
@@ -136,6 +213,13 @@ export function computeExtractionCompleteness(profile: ExtractedCompanyOutput): 
   if (profile.services.length > 0) score += weights.services;
   if (profile.targetCustomers.length > 0) score += weights.targetCustomers;
   if (profile.estimatedCompanySize !== "unknown") score += weights.estimatedCompanySize;
+  if (profile.city !== "unknown") score += weights.city;
+  if (profile.country !== "unknown") score += weights.country;
+  if (profile.decisionMaker !== "unknown") score += weights.decisionMaker;
+  if (profile.linkedInUrl) score += weights.linkedInUrl;
+  if (profile.xUrl) score += weights.xUrl;
+  if (profile.email) score += weights.email;
+  if (profile.revenue !== "unknown") score += weights.revenue;
 
   return Math.round(score * 1000) / 1000;
 }

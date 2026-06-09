@@ -17,8 +17,6 @@ interface ResultsToolbarProps {
 }
 
 const sortLabels: Record<(typeof RESULTS_SORT_OPTIONS)[number], string> = {
-  score_desc: "Score: high to low",
-  score_asc: "Score: low to high",
   company_asc: "Company: A to Z",
   company_desc: "Company: Z to A",
   rank_asc: "Discovery rank",
@@ -26,7 +24,6 @@ const sortLabels: Record<(typeof RESULTS_SORT_OPTIONS)[number], string> = {
 
 export function ResultsToolbar({ view, onChange, disabled = false }: ResultsToolbarProps) {
   const companyFilterId = useId();
-  const minScoreId = useId();
   const stageId = useId();
   const sortId = useId();
   const pageSizeId = useId();
@@ -36,7 +33,7 @@ export function ResultsToolbar({ view, onChange, disabled = false }: ResultsTool
       aria-label="Filter and sort results"
       className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
     >
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <Input
           id={companyFilterId}
           label="Company filter"
@@ -49,25 +46,6 @@ export function ResultsToolbar({ view, onChange, disabled = false }: ResultsTool
               page: 1,
             })
           }
-        />
-
-        <Input
-          id={minScoreId}
-          label="Minimum score"
-          type="number"
-          min={0}
-          max={100}
-          placeholder="Any score"
-          value={view.minScore ?? ""}
-          disabled={disabled}
-          onChange={(event) => {
-            const value = event.target.value.trim();
-
-            onChange({
-              minScore: value === "" ? undefined : Number(value),
-              page: 1,
-            });
-          }}
         />
 
         <Select

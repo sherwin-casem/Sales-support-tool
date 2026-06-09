@@ -29,6 +29,9 @@ export function SearchJobHeader({ job, isRefreshing }: SearchJobHeaderProps) {
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
             {job.query}
           </h1>
+          <p className="text-sm text-slate-600">
+            {job.summary.discovered} companies discovered
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -48,29 +51,11 @@ export function SearchJobHeader({ job, isRefreshing }: SearchJobHeaderProps) {
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Discovered" value={job.summary.discovered} />
-        <Stat label="Crawled" value={job.summary.crawled} />
-        <Stat label="Extracted" value={job.summary.extracted} />
-        <Stat label="Scored" value={job.summary.scored} />
-        <Stat label="Failed" value={job.summary.failed} />
-        <Stat label="Duplicates" value={job.summary.skippedDuplicates} />
-      </dl>
-
       {job.errorMessage ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {job.errorMessage}
         </p>
       ) : null}
     </header>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold text-slate-900">{value}</dd>
-    </div>
   );
 }

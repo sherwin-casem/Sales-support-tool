@@ -29,10 +29,6 @@ export function sortSearchResults(
 
   sorted.sort((left, right) => {
     switch (sort) {
-      case "score_asc":
-        return compareScores(left, right, "asc");
-      case "score_desc":
-        return compareScores(left, right, "desc");
       case "company_asc":
         return compareCompanyNames(left, right, "asc");
       case "company_desc":
@@ -71,18 +67,6 @@ export function processSearchResults(
   const sorted = sortSearchResults(filtered, view.sort);
 
   return paginateResults(sorted, view.page, view.pageSize);
-}
-
-function compareScores(
-  left: SearchResultItemResponse,
-  right: SearchResultItemResponse,
-  direction: "asc" | "desc",
-): number {
-  const leftScore = left.leadScore?.score ?? -1;
-  const rightScore = right.leadScore?.score ?? -1;
-  const delta = leftScore - rightScore;
-
-  return direction === "asc" ? delta : -delta;
 }
 
 function compareCompanyNames(

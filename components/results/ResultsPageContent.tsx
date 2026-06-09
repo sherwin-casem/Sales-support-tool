@@ -1,12 +1,14 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { CompanyDetailDrawer } from "@/components/results/CompanyDetailDrawer";
 import { ResultsList } from "@/components/results/ResultsList";
 import { ResultsToolbar } from "@/components/results/ResultsToolbar";
 import { SearchJobHeader } from "@/components/results/SearchJobHeader";
+import { useSavedCompanies } from "@/components/results/use-saved-companies";
 import { useSearchJob } from "@/components/results/use-search-job";
 import { processSearchResults } from "@/lib/results/process-search-results";
 import { isSearchJobActive } from "@/lib/results/search-job-status";
@@ -15,20 +17,23 @@ import {
   ResultsViewSchema,
   type ResultsViewState,
 } from "@/lib/validations/results-view.schema";
+import type { SearchResultItemResponse } from "@/types/api/search.api.types";
 
 interface ResultsPageContentProps {
   searchJobId: string;
 }
 
 export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
+  const router = useRouter();
   const [view, setView] = useState<ResultsViewState>(DEFAULT_RESULTS_VIEW);
+  const [selectedResult, setSelectedResult] = useState<SearchResultItemResponse | null>(null);
+  const { isSaved, toggleSave } = useSavedCompanies();
 
   const apiFilters = useMemo(
     () => ({
-      minScore: view.minScore,
       stage: view.stage,
     }),
-    [view.minScore, view.stage],
+    [view.stage],
   );
 
   const { data, error, isLoading, isRefreshing, reload } = useSearchJob(
@@ -49,9 +54,18 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     setView((current) => ResultsViewSchema.parse({ ...current, ...patch }));
   }
 
+  function handleBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+
+    router.push("/search");
+  }
+
   if (isLoading) {
     return (
-      <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <ResultsSkeleton />
       </main>
     );
@@ -65,20 +79,20 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
           <Button type="button" onClick={() => void reload()}>
             Retry
           </Button>
-          <Link href="/search" className="inline-flex items-center text-sm font-medium text-brand-600">
-            Start a new search
-          </Link>
+          <Button type="button" variant="secondary" onClick={() => router.push("/search")}>
+            Back to search
+          </Button>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <Link href="/search" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-          ← New search
-        </Link>
+        <Button type="button" variant="ghost" className="px-0" onClick={handleBack}>
+          ← Back
+        </Button>
       </div>
 
       <div className="space-y-6">
@@ -88,7 +102,7 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
 
         {isSearchJobActive(data.status) ? (
           <p className="text-sm text-slate-600" aria-live="polite">
-            Search is still running. Results will refresh automatically as companies are scored.
+            Search is still running. Results will refresh automatically as companies are processed.
           </p>
         ) : null}
 
@@ -96,10 +110,21 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
           <ResultsList
             items={processed.items}
             pagination={processed.pagination}
+            searchCriteria={data.criteria}
+            isSaved={isSaved}
+            onOpenDetail={setSelectedResult}
+            onToggleSave={toggleSave}
             onPageChange={(page) => updateView({ page })}
           />
         ) : null}
       </div>
+
+      <CompanyDetailDrawer
+        result={selectedResult}
+        searchCriteria={data.criteria}
+        open={selectedResult !== null}
+        onClose={() => setSelectedResult(null)}
+      />
     </main>
   );
 }
@@ -108,11 +133,7 @@ function ResultsSkeleton() {
   return (
     <div className="animate-pulse space-y-6">
       <div className="h-8 w-2/3 rounded-lg bg-slate-200" />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="h-20 rounded-xl bg-slate-200" />
-        ))}
-      </div>
+      <div className="h-24 rounded-2xl bg-slate-200" />
       <div className="h-40 rounded-2xl bg-slate-200" />
       <div className="h-72 rounded-2xl bg-slate-200" />
     </div>
