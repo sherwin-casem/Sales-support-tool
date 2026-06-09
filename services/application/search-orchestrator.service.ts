@@ -152,6 +152,7 @@ export class SearchOrchestrator {
       await this.deps.searchRepository.updateJobCriteria(searchJobId, criteria);
 
       const discoveriesResult = await this.discoverCompaniesWithRetry(
+        input.query,
         criteria,
         input.companyLimit ?? job.companyLimit,
       );
@@ -162,7 +163,7 @@ export class SearchOrchestrator {
       }
 
       if (discoveriesResult.value.length === 0) {
-        const message = buildNoCompaniesDiscoveredMessage(criteria);
+        const message = buildNoCompaniesDiscoveredMessage(input.query, criteria);
         await this.failJob(searchJobId, message);
         return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
       }
@@ -330,6 +331,7 @@ export class SearchOrchestrator {
   }
 
   private async discoverCompaniesWithRetry(
+    query: string,
     criteria: ParsedQuery,
     limit: number,
   ): Promise<Result<DiscoveredCompany[], SearchOrchestratorError>> {
@@ -337,8 +339,9 @@ export class SearchOrchestrator {
       const result = await withRetry(
         async () => {
           const discovered = await this.deps.companyDiscovery.discover({
-            industry: criteria.industry,
-            location: criteria.location,
+            query,
+            industry: criteria.industry !== "unknown" ? criteria.industry : undefined,
+            location: criteria.location !== "unknown" ? criteria.location : undefined,
             limit,
           });
 
@@ -705,13 +708,15 @@ function createEmptySummary(): SearchOrchestrationSummary {
   };
 }
 
-function buildNoCompaniesDiscoveredMessage(criteria: ParsedQuery): string {
-  const criteriaSummary = `industry=${criteria.industry}, location=${criteria.location}`;
+function buildNoCompaniesDiscoveredMessage(query: string, criteria: ParsedQuery): string {
+  const hints =
+    criteria.industry !== "unknown" || criteria.location !== "unknown"
+      ? ` (parsed hints: industry=${criteria.industry}, location=${criteria.location})`
+      : "";
 
   return (
-    `No companies discovered for search criteria (${criteriaSummary}). ` +
-    "Discovery sources returned no companies. DuckDuckGo may be blocked from this server IP; " +
-    "try a supported location (Finland, Germany, United States, United Kingdom, Sweden) or configure DISCOVERY_HTTP_PROXY."
+    `No companies discovered for query "${query}"${hints}. ` +
+    "Try a more specific description, a different location, or reduce the company limit and retry."
   );
 }
 

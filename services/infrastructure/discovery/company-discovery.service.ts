@@ -1,11 +1,9 @@
 import { CompanyDiscoveryAgent } from "@/agents/discovery/company-discovery.agent.js";
-import { getDiscoveryConfig } from "@/lib/config/discovery.config.js";
-import { createDiscoveryHttpClient, createWikidataHttpClient } from "@/lib/http/http-client.js";
+import { getEnv } from "@/lib/config/env.js";
+import { createOpenAIClient } from "@/lib/config/openai.client.js";
 import { aiLogger } from "@/lib/logging/logger.js";
 import { withRetry } from "@/lib/utils/retry.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
-import { createDuckDuckGoHtmlDiscoverySource } from "@/services/infrastructure/discovery/sources/duckduckgo-html.source.js";
-import { createWikidataDiscoverySource } from "@/services/infrastructure/discovery/sources/wikidata.source.js";
 import {
   CompanyDiscoveryError,
   DiscoveryError,
@@ -44,8 +42,9 @@ export class CompanyDiscoveryService implements CompanyDiscoveryPort {
     const startedAt = Date.now();
 
     aiLogger.info("CompanyDiscoveryService.discover started", {
-      industry: input.industry,
-      location: input.location,
+      queryLength: input.query.length,
+      industryHint: input.industry ?? "not specified",
+      locationHint: input.location ?? "not specified",
       limit: input.limit ?? 25,
     });
 
@@ -54,7 +53,7 @@ export class CompanyDiscoveryService implements CompanyDiscoveryPort {
         async () => {
           const attemptResult = await this.agent.execute(input);
 
-          if (!attemptResult.ok && attemptResult.error.code === "ALL_SOURCES_FAILED") {
+          if (!attemptResult.ok && attemptResult.error.code === "DISCOVERY_FAILED") {
             throw attemptResult.error;
           }
 
@@ -73,8 +72,7 @@ export class CompanyDiscoveryService implements CompanyDiscoveryPort {
         aiLogger.error("CompanyDiscoveryService.discover failed", {
           code: result.error.code,
           durationMs,
-          industry: input.industry,
-          location: input.location,
+          queryLength: input.query.length,
         });
 
         return err(CompanyDiscoveryError.fromDiscoveryError(result.error));
@@ -82,8 +80,7 @@ export class CompanyDiscoveryService implements CompanyDiscoveryPort {
 
       aiLogger.info("CompanyDiscoveryService.discover completed", {
         durationMs,
-        industry: input.industry,
-        location: input.location,
+        queryLength: input.query.length,
         resultCount: result.value.length,
       });
 
@@ -95,8 +92,7 @@ export class CompanyDiscoveryService implements CompanyDiscoveryPort {
         aiLogger.error("CompanyDiscoveryService.discover exhausted retries", {
           code: error.code,
           durationMs,
-          industry: input.industry,
-          location: input.location,
+          queryLength: input.query.length,
         });
 
         return err(CompanyDiscoveryError.fromDiscoveryError(error));
@@ -104,8 +100,7 @@ export class CompanyDiscoveryService implements CompanyDiscoveryPort {
 
       aiLogger.error("CompanyDiscoveryService.discover unexpected failure", {
         durationMs,
-        industry: input.industry,
-        location: input.location,
+        queryLength: input.query.length,
         message: error instanceof Error ? error.message : "Unknown error",
       });
 
@@ -123,13 +118,9 @@ export class CompanyDiscoveryService implements CompanyDiscoveryPort {
 let cachedService: CompanyDiscoveryService | undefined;
 
 export function createCompanyDiscoveryService(): CompanyDiscoveryService {
-  const duckDuckGoHttp = createDiscoveryHttpClient(getDiscoveryConfig());
-  const agent = new CompanyDiscoveryAgent({
-    sources: [
-      createWikidataDiscoverySource(createWikidataHttpClient()),
-      createDuckDuckGoHtmlDiscoverySource(duckDuckGoHttp),
-    ],
-  });
+  const env = getEnv();
+  const openai = createOpenAIClient(env.OPENAI_API_KEY);
+  const agent = new CompanyDiscoveryAgent(openai, { model: env.OPENAI_MODEL });
 
   return new CompanyDiscoveryService(agent);
 }
@@ -154,7 +145,6 @@ export function mapCompanyDiscoveryError(error: CompanyDiscoveryError): {
   switch (error.code) {
     case "INVALID_INPUT":
       return { status: 400, message: error.message, code: error.code };
-    case "ALL_SOURCES_FAILED":
     case "DISCOVERY_FAILED":
       return { status: 503, message: error.message, code: error.code };
     default:

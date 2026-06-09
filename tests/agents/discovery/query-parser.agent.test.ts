@@ -26,7 +26,10 @@ describe("QueryParserAgent", () => {
     );
 
     createStructuredCompletion = vi.fn();
-    const openai: OpenAIClientPort = { createStructuredCompletion };
+    const openai: OpenAIClientPort = {
+      createStructuredCompletion,
+      createWebDiscoveryCompletion: vi.fn(),
+    };
 
     agent = new QueryParserAgent(openai, {
       model: "gpt-4o-mini",
