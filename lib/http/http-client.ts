@@ -1,4 +1,3 @@
-import { ProxyAgent, type Dispatcher } from "undici";
 import type { DiscoveryConfig } from "@/lib/config/discovery.config.js";
 
 export interface HttpResponse {
@@ -13,18 +12,11 @@ export interface HttpClient {
 }
 
 export interface FetchHttpClientOptions {
-  proxyUrl?: string;
   defaultTimeoutMs?: number;
 }
 
 export class FetchHttpClient implements HttpClient {
-  private readonly dispatcher?: Dispatcher;
-
-  constructor(private readonly options: FetchHttpClientOptions = {}) {
-    if (options.proxyUrl) {
-      this.dispatcher = new ProxyAgent(options.proxyUrl);
-    }
-  }
+  constructor(private readonly options: FetchHttpClientOptions = {}) {}
 
   async get(url: string, init?: RequestInit): Promise<HttpResponse> {
     const response = await fetch(url, this.buildRequestInit(init));
@@ -60,7 +52,6 @@ export class FetchHttpClient implements HttpClient {
       ...init,
       signal,
       headers: mergeHeaders(undefined, init?.headers),
-      ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
     };
   }
 }
@@ -103,7 +94,6 @@ export const httpClient = new FetchHttpClient();
 
 export function createDiscoveryHttpClient(config: DiscoveryConfig): HttpClient {
   return new FetchHttpClient({
-    proxyUrl: config.DISCOVERY_HTTP_PROXY,
     defaultTimeoutMs: config.DISCOVERY_DDG_TIMEOUT_MS,
   });
 }
