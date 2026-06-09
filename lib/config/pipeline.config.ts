@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const pipelineConfigSchema = z.object({
   SEARCH_EXTRACTION_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
-  SEARCH_SCORING_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
+  SEARCH_ENRICHMENT_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
 });
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;

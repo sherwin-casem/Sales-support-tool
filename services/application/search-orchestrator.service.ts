@@ -1,12 +1,12 @@
 import { SearchJobStatus, SearchResultStage } from "@prisma/client";
 import { getCrawlerConfig } from "@/lib/config/crawler.config.js";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
+import { computeExtractionCompleteness } from "@/lib/validations/company-extraction.schema.js";
 import { logger } from "@/lib/logging/logger.js";
 import { runWithConcurrency } from "@/lib/utils/concurrency.js";
 import { withRetry } from "@/lib/utils/retry.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
-import type { LeadRepository } from "@/repositories/interfaces/lead.repository.interface.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
 import type { DiscoveredCompany } from "@/types/agents/company-discovery.types.js";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
@@ -16,7 +16,8 @@ import type { CrawlCompanyResult } from "@/types/crawler/crawler.types.js";
 import type { SearchResultRecord } from "@/types/repositories/search.repository.types.js";
 import type { CompanyDiscoveryPort } from "@/services/infrastructure/discovery/company-discovery.service.js";
 import type { CompanyExtractionPort } from "@/services/infrastructure/ai/company-extraction.service.js";
-import type { LeadScoringPort } from "@/services/infrastructure/ai/lead-scoring.service.js";
+import type { LeadEnrichmentPort } from "@/services/infrastructure/ai/lead-enrichment.service.js";
+import { hashEnrichmentProfile } from "@/services/infrastructure/ai/lead-enrichment.service.js";
 import type { QueryParserPort } from "@/services/infrastructure/ai/query-parser.service.js";
 import type { WebsiteCrawlerPort } from "@/services/infrastructure/crawler/website-crawler.service.js";
 import {
@@ -38,10 +39,9 @@ export interface SearchOrchestratorDependencies {
   websiteCrawler: WebsiteCrawlerPort;
   textCleaning: TextCleaningPort;
   companyExtraction: CompanyExtractionPort;
-  leadScoring: LeadScoringPort;
+  leadEnrichment: LeadEnrichmentPort;
   searchRepository: SearchRepository;
   companyRepository: CompanyRepository;
-  leadRepository: LeadRepository;
 }
 
 export interface SearchOrchestratorOptions {
@@ -49,13 +49,13 @@ export interface SearchOrchestratorOptions {
   initialDelayMs?: number;
   crawlConcurrency?: number;
   extractionConcurrency?: number;
-  scoringConcurrency?: number;
+  enrichmentConcurrency?: number;
 }
 
 interface StageOutcome {
   crawled: number;
   extracted: number;
-  scored: number;
+  enriched: number;
   failed: number;
   failures: SearchStageFailure[];
 }
@@ -68,7 +68,7 @@ export class SearchOrchestrator {
   private readonly initialDelayMs: number;
   private readonly crawlConcurrency: number;
   private readonly extractionConcurrency: number;
-  private readonly scoringConcurrency: number;
+  private readonly enrichmentConcurrency: number;
 
   constructor(
     private readonly deps: SearchOrchestratorDependencies,
@@ -82,8 +82,8 @@ export class SearchOrchestrator {
       options.crawlConcurrency ?? getCrawlerConfig().CRAWLER_SEARCH_CONCURRENCY;
     this.extractionConcurrency =
       options.extractionConcurrency ?? pipelineConfig.SEARCH_EXTRACTION_CONCURRENCY;
-    this.scoringConcurrency =
-      options.scoringConcurrency ?? pipelineConfig.SEARCH_SCORING_CONCURRENCY;
+    this.enrichmentConcurrency =
+      options.enrichmentConcurrency ?? pipelineConfig.SEARCH_ENRICHMENT_CONCURRENCY;
   }
 
   async run(
@@ -231,31 +231,31 @@ export class SearchOrchestrator {
         stage: SearchResultStage.EXTRACTED,
       });
 
-      logger.info("SearchOrchestrator scoring stage started", {
+      logger.info("SearchOrchestrator enrichment stage started", {
         searchJobId,
         companyCount: extractedResults.length,
-        scoringConcurrency: this.scoringConcurrency,
+        enrichmentConcurrency: this.enrichmentConcurrency,
       });
 
-      const scoringOutcomes = await runWithConcurrency(
+      const enrichmentOutcomes = await runWithConcurrency(
         extractedResults,
-        this.scoringConcurrency,
-        (searchResult) => this.processScoring(searchJobId, criteria, searchResult),
+        this.enrichmentConcurrency,
+        (searchResult) => this.processEnrichment(searchResult),
       );
 
-      mergeStageOutcomes(summary, failures, scoringOutcomes);
+      mergeStageOutcomes(summary, failures, enrichmentOutcomes);
 
       const finalStatus =
-        summary.scored > 0
+        summary.enriched > 0
           ? SearchJobStatus.COMPLETED
           : SearchJobStatus.FAILED;
 
       await this.deps.searchRepository.updateJobStatus(searchJobId, finalStatus, {
         completedAt: new Date(),
         errorMessage:
-          summary.scored > 0 && summary.failed > 0
+          summary.enriched > 0 && summary.failed > 0
             ? `Completed with partial failures (${summary.failed} failed stages)`
-            : summary.scored === 0
+            : summary.enriched === 0
               ? "No leads were fully processed"
               : null,
       });
@@ -423,7 +423,7 @@ export class SearchOrchestrator {
       stage: SearchResultStage.CRAWLED,
     });
 
-    return { crawled: 1, extracted: 0, scored: 0, failed: 0, failures: [] };
+    return { crawled: 1, extracted: 0, enriched: 0, failed: 0, failures: [] };
   }
 
   private async processExtraction(searchResult: SearchResultRecord): Promise<StageOutcome> {
@@ -496,12 +496,10 @@ export class SearchOrchestrator {
       stage: SearchResultStage.EXTRACTED,
     });
 
-    return { crawled: 0, extracted: 1, scored: 0, failed: 0, failures: [] };
+    return { crawled: 0, extracted: 1, enriched: 0, failed: 0, failures: [] };
   }
 
-  private async processScoring(
-    searchJobId: string,
-    criteria: ParsedQuery,
+  private async processEnrichment(
     searchResult: SearchResultRecord,
   ): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
@@ -509,24 +507,34 @@ export class SearchOrchestrator {
       stage: SearchResultStage.SCORING,
     });
 
-    const profile = this.getExtractedProfile(searchResult.id);
+    const company = await this.deps.companyRepository.findById(searchResult.companyId);
 
-    if (!profile) {
-      return this.markScoreFailed(
+    if (!company?.websiteUrl) {
+      return this.markEnrichFailed(
         searchResult.id,
         searchResult.companyId,
-        "Extracted profile not found for scoring",
+        "Company website is missing for enrichment",
       );
     }
 
-    const scoringResult = await this.runWithResultRetry(
+    const websiteProfile = this.getExtractedProfile(searchResult.id);
+
+    if (!websiteProfile) {
+      return this.markEnrichFailed(
+        searchResult.id,
+        searchResult.companyId,
+        "Extracted profile not found for enrichment",
+      );
+    }
+
+    const enrichmentResult = await this.runWithResultRetry(
       () =>
-        this.deps.leadScoring.score({
-          profile,
-          criteria,
-          companyId: searchResult.companyId,
-          searchResultId: searchResult.id,
-          searchJobId,
+        this.deps.leadEnrichment.enrich({
+          companyName: websiteProfile.companyName,
+          domain: company.normalizedDomain,
+          website: company.websiteUrl!,
+          websiteProfile,
+          companyId: company.id,
         }),
       (error) =>
         error.code === "OPENAI_ERROR" ||
@@ -534,27 +542,36 @@ export class SearchOrchestrator {
         error.code === "EMPTY_RESPONSE",
     );
 
-    if (!scoringResult.ok) {
-      return this.markScoreFailed(
+    if (!enrichmentResult.ok) {
+      return this.markEnrichFailed(
         searchResult.id,
-        searchResult.companyId,
-        scoringResult.error.message,
+        company.id,
+        enrichmentResult.error.message,
       );
     }
 
-    await this.deps.leadRepository.saveScore({
-      searchResultId: searchResult.id,
-      searchJobId,
-      totalScore: scoringResult.value.leadScore.score,
-      confidence: scoringResult.value.leadScore.confidence,
-      breakdown: scoringResult.value.leadScore.breakdown,
-      rationale: scoringResult.value.leadScore.explanation,
-      modelUsed: scoringResult.value.meta.modelUsed,
-      promptVersion: scoringResult.value.meta.promptVersion,
-      scoredAt: new Date(scoringResult.value.meta.scoredAt),
+    const enrichedProfile = enrichmentResult.value.profile;
+    const contentHash = hashEnrichmentProfile(enrichedProfile);
+
+    await this.deps.companyRepository.saveProfile({
+      companyId: company.id,
+      structuredData: enrichedProfile,
+      completeness: computeExtractionCompleteness(enrichedProfile),
+      modelUsed: enrichmentResult.value.meta.modelUsed,
+      promptVersion: enrichmentResult.value.meta.promptVersion,
+      contentHash,
+      extractedAt: new Date(enrichmentResult.value.meta.enrichedAt),
     });
 
-    return { crawled: 0, extracted: 0, scored: 1, failed: 0, failures: [] };
+    this.storeExtractedProfile(searchResult.id, enrichedProfile);
+
+    await this.deps.searchRepository.updateResultStage({
+      searchResultId: searchResult.id,
+      stage: SearchResultStage.SCORED,
+      completedAt: new Date(),
+    });
+
+    return { crawled: 0, extracted: 0, enriched: 1, failed: 0, failures: [] };
   }
 
   private buildLlmContent(crawlResult: CrawlCompanyResult): string {
@@ -624,7 +641,7 @@ export class SearchOrchestrator {
     }, { extracted: 0 });
   }
 
-  private async markScoreFailed(
+  private async markEnrichFailed(
     searchResultId: string,
     companyId: string,
     message: string,
@@ -639,7 +656,7 @@ export class SearchOrchestrator {
       searchResultId,
       companyId,
       message,
-    }, { scored: 0 });
+    }, { enriched: 0 });
   }
 
   private async failJob(searchJobId: string, message: string): Promise<void> {
@@ -672,12 +689,12 @@ export class SearchOrchestrator {
 function createStageFailure(
   stage: SearchStageFailure["stage"],
   failure: Pick<SearchStageFailure, "searchResultId" | "companyId" | "message">,
-  counts: Partial<Pick<StageOutcome, "crawled" | "extracted" | "scored">> = {},
+  counts: Partial<Pick<StageOutcome, "crawled" | "extracted" | "enriched">> = {},
 ): StageOutcome {
   return {
     crawled: counts.crawled ?? 0,
     extracted: counts.extracted ?? 0,
-    scored: counts.scored ?? 0,
+    enriched: counts.enriched ?? 0,
     failed: 1,
     failures: [{ ...failure, stage }],
   };
@@ -691,7 +708,7 @@ function mergeStageOutcomes(
   for (const outcome of outcomes) {
     summary.crawled += outcome.crawled;
     summary.extracted += outcome.extracted;
-    summary.scored += outcome.scored;
+    summary.enriched += outcome.enriched;
     summary.failed += outcome.failed;
     failures.push(...outcome.failures);
   }
@@ -702,7 +719,7 @@ function createEmptySummary(): SearchOrchestrationSummary {
     discovered: 0,
     crawled: 0,
     extracted: 0,
-    scored: 0,
+    enriched: 0,
     failed: 0,
     skippedDuplicates: 0,
   };

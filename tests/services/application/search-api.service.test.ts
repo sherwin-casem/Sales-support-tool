@@ -176,7 +176,7 @@ describe("SearchApiService", () => {
 
     expect(result.id).toBe(searchJobId);
     expect(result.status).toBe("COMPLETED");
-    expect(result.summary.scored).toBe(1);
+    expect(result.summary.enriched).toBe(1);
     expect(result.results).toHaveLength(1);
   });
 });

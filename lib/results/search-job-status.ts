@@ -8,6 +8,10 @@ export function isSearchJobActive(status: SearchJobStatus): boolean {
 }
 
 export function formatSearchJobStatus(status: SearchJobStatus): string {
+  if (status === "SCORING") {
+    return "Enriching";
+  }
+
   return status
     .toLowerCase()
     .split("_")

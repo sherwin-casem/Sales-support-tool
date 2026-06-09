@@ -19,7 +19,7 @@ export interface SearchOrchestrationSummary {
   discovered: number;
   crawled: number;
   extracted: number;
-  scored: number;
+  enriched: number;
   failed: number;
   skippedDuplicates: number;
 }
