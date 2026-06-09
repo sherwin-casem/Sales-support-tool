@@ -130,7 +130,7 @@ Both stages call OpenAI. Keep concurrency modest to avoid rate limits; start at 
 
 ### Discovery (OpenAI web search)
 
-Company discovery uses the OpenAI Responses API with the built-in **web search** tool. The full natural-language search query is sent to the model (industry and location are optional hints from the query parser). No DuckDuckGo, Wikidata, or HTTP proxy configuration is required.
+Company discovery uses the OpenAI Responses API with the built-in **web search** tool. The full natural-language search query is sent to the model (industry and location are optional hints from the query parser).
 
 Use a web-search-capable model via `OPENAI_MODEL` (for example `gpt-4o-mini` or `gpt-4o`). Discovery shares the same API key as extraction and scoring.
 
