@@ -53,7 +53,7 @@ export function buildSearchSummary(
     discovered: results.length,
     crawled: countByStages(results, ["CRAWLED", "EXTRACTING", "EXTRACT_FAILED", "EXTRACTED", "SCORING", "SCORE_FAILED", "SCORED"]),
     extracted: countByStages(results, ["EXTRACTED", "SCORING", "SCORE_FAILED", "SCORED"]),
-    scored: countByStage(results, "SCORED"),
+    enriched: countByStage(results, "SCORED"),
     failed: results.filter((result) => FAILED_STAGES.includes(result.stage)).length,
     skippedDuplicates,
   };

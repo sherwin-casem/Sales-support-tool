@@ -7,7 +7,6 @@ import { CompanyHeader } from "@/components/company/CompanyHeader";
 import { CompanyProfilePanel } from "@/components/company/CompanyProfilePanel";
 import { CrawlHistoryTimeline } from "@/components/company/CrawlHistoryTimeline";
 import { ExtractedInformation } from "@/components/company/ExtractedInformation";
-import { LeadScorePanel } from "@/components/company/LeadScorePanel";
 import { useCompanyDetail } from "@/components/company/use-company-detail";
 
 interface CompanyDetailContentProps {
@@ -72,17 +71,6 @@ export function CompanyDetailContent({ companyId }: CompanyDetailContentProps) {
           </div>
 
           <aside className="space-y-6">
-            {data.latestLeadScore ? (
-              <LeadScorePanel leadScore={data.latestLeadScore} />
-            ) : (
-              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900">Lead score</h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  No scored lead is available for this company yet.
-                </p>
-              </section>
-            )}
-
             <RecentSearchesPanel company={data} />
           </aside>
         </div>
@@ -112,10 +100,7 @@ function RecentSearchesPanel({
             >
               {appearance.query}
             </Link>
-            <p className="mt-1 text-xs text-slate-500">
-              {appearance.stage.replaceAll("_", " ")}
-              {appearance.leadScore !== null ? ` · score ${Math.round(appearance.leadScore)}` : ""}
-            </p>
+            <p className="mt-1 text-xs text-slate-500">{appearance.stage.replaceAll("_", " ")}</p>
           </li>
         ))}
       </ul>

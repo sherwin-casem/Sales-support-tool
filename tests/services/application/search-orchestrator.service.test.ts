@@ -125,58 +125,21 @@ function createDependencies(
         }),
       ),
     },
-    leadScoring: {
-      score: vi.fn().mockResolvedValue(
+    leadEnrichment: {
+      enrich: vi.fn().mockResolvedValue(
         ok({
-          leadScore: {
-            score: 88.15,
-            confidence: 0.91,
-            explanation: "Strong logistics fit with aligned employee range.",
-            breakdown: {
-              industryFit: {
-                score: 100,
-                weight: 0.3,
-                weightedScore: 30,
-                confidence: 0.95,
-                rationale: "Exact industry match.",
-                signals: [],
-              },
-              sizeFit: {
-                score: 95,
-                weight: 0.25,
-                weightedScore: 23.75,
-                confidence: 0.9,
-                rationale: "Strong overlap.",
-                signals: [],
-              },
-              businessMaturity: {
-                score: 80,
-                weight: 0.25,
-                weightedScore: 20,
-                confidence: 0.8,
-                rationale: "Mature profile.",
-                signals: [],
-              },
-              growthIndicators: {
-                score: 60,
-                weight: 0.2,
-                weightedScore: 12,
-                confidence: 0.7,
-                rationale: "Moderate growth.",
-                signals: [],
-              },
-            },
+          profile: {
+            ...extractedProfile,
+            city: "helsinki",
+            country: "finland",
+            decisionMaker: "Jane Doe, CEO",
+            linkedInUrl: "https://linkedin.com/company/acme",
+            email: "info@acme.fi",
           },
           meta: {
             promptVersion: "v1",
             modelUsed: "gpt-4o",
-            scoredAt: "2026-06-07T12:00:00.000Z",
-            weights: {
-              industryFit: 0.3,
-              sizeFit: 0.25,
-              businessMaturity: 0.25,
-              growthIndicators: 0.2,
-            },
+            enrichedAt: "2026-06-07T12:02:00.000Z",
           },
         }),
       ),
@@ -261,27 +224,6 @@ function createDependencies(
       findLatestProfile: vi.fn(),
       markCrawled: vi.fn().mockResolvedValue({ ...company, lastCrawledAt: new Date("2026-06-07T12:01:00.000Z") }),
     },
-    leadRepository: {
-      saveScore: vi.fn().mockResolvedValue({
-        leadScore: {
-          id: "00000000-0000-4000-8000-000000000050",
-          searchResultId,
-          searchJobId,
-          totalScore: 88.15,
-          confidence: 0.91,
-          breakdown: {},
-          rationale: "Strong logistics fit.",
-          modelUsed: "gpt-4o",
-          promptVersion: "v1",
-          scoredAt: new Date("2026-06-07T12:00:00.000Z"),
-          createdAt: new Date("2026-06-07T12:00:00.000Z"),
-          updatedAt: new Date("2026-06-07T12:00:00.000Z"),
-        },
-        created: true,
-      }),
-      findBySearchResultId: vi.fn(),
-      findRankedBySearchJobId: vi.fn(),
-    },
     ...overrides,
   };
 }
@@ -303,7 +245,7 @@ describe("SearchOrchestrator", () => {
       expect(result.value.summary.discovered).toBe(1);
       expect(result.value.summary.crawled).toBe(1);
       expect(result.value.summary.extracted).toBe(1);
-      expect(result.value.summary.scored).toBe(1);
+      expect(result.value.summary.enriched).toBe(1);
       expect(result.value.summary.failed).toBe(0);
     }
 
@@ -312,7 +254,8 @@ describe("SearchOrchestrator", () => {
       "DISCOVERING",
       expect.any(Object),
     );
-    expect(deps.leadRepository.saveScore).toHaveBeenCalledOnce();
+    expect(deps.leadEnrichment.enrich).toHaveBeenCalledOnce();
+    expect(deps.companyRepository.saveProfile).toHaveBeenCalledTimes(2);
   });
 
   it("retries query parsing before failing the job", async () => {
@@ -479,11 +422,11 @@ describe("SearchOrchestrator", () => {
     expect(deps.websiteCrawler.crawl).toHaveBeenCalledTimes(4);
   });
 
-  it("extracts and scores multiple companies in parallel", async () => {
+  it("extracts and enriches multiple companies in parallel", async () => {
     let activeExtractions = 0;
     let maxActiveExtractions = 0;
-    let activeScorings = 0;
-    let maxActiveScorings = 0;
+    let activeEnrichments = 0;
+    let maxActiveEnrichments = 0;
 
     const companyIds = [
       "00000000-0000-4000-8000-000000000010",
@@ -564,62 +507,22 @@ describe("SearchOrchestrator", () => {
         },
       });
     });
-    deps.leadScoring.score = vi.fn().mockImplementation(async () => {
-      activeScorings += 1;
-      maxActiveScorings = Math.max(maxActiveScorings, activeScorings);
+    deps.leadEnrichment.enrich = vi.fn().mockImplementation(async () => {
+      activeEnrichments += 1;
+      maxActiveEnrichments = Math.max(maxActiveEnrichments, activeEnrichments);
       await new Promise((resolve) => setTimeout(resolve, 30));
-      activeScorings -= 1;
+      activeEnrichments -= 1;
 
       return ok({
-        leadScore: {
-          score: 88.15,
-          confidence: 0.91,
-          explanation: "Strong logistics fit with aligned employee range.",
-          breakdown: {
-            industryFit: {
-              score: 100,
-              weight: 0.3,
-              weightedScore: 30,
-              confidence: 0.95,
-              rationale: "Exact industry match.",
-              signals: [],
-            },
-            sizeFit: {
-              score: 95,
-              weight: 0.25,
-              weightedScore: 23.75,
-              confidence: 0.9,
-              rationale: "Strong overlap.",
-              signals: [],
-            },
-            businessMaturity: {
-              score: 80,
-              weight: 0.25,
-              weightedScore: 20,
-              confidence: 0.8,
-              rationale: "Mature profile.",
-              signals: [],
-            },
-            growthIndicators: {
-              score: 60,
-              weight: 0.2,
-              weightedScore: 12,
-              confidence: 0.7,
-              rationale: "Moderate growth.",
-              signals: [],
-            },
-          },
+        profile: {
+          ...extractedProfile,
+          city: "helsinki",
+          country: "finland",
         },
         meta: {
           promptVersion: "v1",
           modelUsed: "gpt-4o",
-          scoredAt: "2026-06-07T12:00:00.000Z",
-          weights: {
-            industryFit: 0.3,
-            sizeFit: 0.25,
-            businessMaturity: 0.25,
-            growthIndicators: 0.2,
-          },
+          enrichedAt: "2026-06-07T12:02:00.000Z",
         },
       });
     });
@@ -628,7 +531,7 @@ describe("SearchOrchestrator", () => {
       maxAttempts: 1,
       crawlConcurrency: 4,
       extractionConcurrency: 3,
-      scoringConcurrency: 3,
+      enrichmentConcurrency: 3,
     });
 
     const result = await orchestrator.run({
@@ -640,13 +543,13 @@ describe("SearchOrchestrator", () => {
 
     if (result.ok) {
       expect(result.value.summary.extracted).toBe(4);
-      expect(result.value.summary.scored).toBe(4);
+      expect(result.value.summary.enriched).toBe(4);
       expect(maxActiveExtractions).toBe(3);
-      expect(maxActiveScorings).toBe(3);
+      expect(maxActiveEnrichments).toBe(3);
     }
 
     expect(deps.companyExtraction.extract).toHaveBeenCalledTimes(4);
-    expect(deps.leadScoring.score).toHaveBeenCalledTimes(4);
+    expect(deps.leadEnrichment.enrich).toHaveBeenCalledTimes(4);
   });
 
   it("continues when one company crawl fails and completes with partial failures", async () => {
@@ -742,7 +645,7 @@ describe("SearchOrchestrator", () => {
     if (result.ok) {
       expect(result.value.status).toBe("COMPLETED");
       expect(result.value.summary.crawled).toBe(1);
-      expect(result.value.summary.scored).toBe(1);
+      expect(result.value.summary.enriched).toBe(1);
       expect(result.value.summary.failed).toBe(1);
       expect(result.value.failures).toHaveLength(1);
       expect(result.value.failures[0]?.stage).toBe("CRAWL_FAILED");

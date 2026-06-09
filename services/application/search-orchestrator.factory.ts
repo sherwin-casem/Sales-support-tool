@@ -3,11 +3,10 @@ import {
   type SearchOrchestratorDependencies,
 } from "@/services/application/search-orchestrator.service.js";
 import { getCompanyRepository } from "@/repositories/prisma/company.repository.js";
-import { getLeadRepository } from "@/repositories/prisma/lead.repository.js";
 import { getSearchRepository } from "@/repositories/prisma/search.repository.js";
 import { getCompanyDiscoveryService } from "@/services/infrastructure/discovery/company-discovery.service.js";
 import { getCompanyExtractionService } from "@/services/infrastructure/ai/company-extraction.service.js";
-import { getLeadScoringService } from "@/services/infrastructure/ai/lead-scoring.service.js";
+import { getLeadEnrichmentService } from "@/services/infrastructure/ai/lead-enrichment.service.js";
 import { getQueryParserService } from "@/services/infrastructure/ai/query-parser.service.js";
 import { getCrawlerConfig } from "@/lib/config/crawler.config.js";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
@@ -21,10 +20,9 @@ export function createDefaultSearchOrchestratorDependencies(): SearchOrchestrato
     websiteCrawler: getWebsiteCrawlerService(),
     textCleaning: getTextCleaningService(),
     companyExtraction: getCompanyExtractionService(),
-    leadScoring: getLeadScoringService(),
+    leadEnrichment: getLeadEnrichmentService(),
     searchRepository: getSearchRepository(),
     companyRepository: getCompanyRepository(),
-    leadRepository: getLeadRepository(),
   };
 }
 
@@ -37,7 +35,7 @@ export function getSearchOrchestrator() {
     cachedOrchestrator = createSearchOrchestrator(createDefaultSearchOrchestratorDependencies(), {
       crawlConcurrency: crawlerConfig.CRAWLER_SEARCH_CONCURRENCY,
       extractionConcurrency: pipelineConfig.SEARCH_EXTRACTION_CONCURRENCY,
-      scoringConcurrency: pipelineConfig.SEARCH_SCORING_CONCURRENCY,
+      enrichmentConcurrency: pipelineConfig.SEARCH_ENRICHMENT_CONCURRENCY,
     });
   }
 
