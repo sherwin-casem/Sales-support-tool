@@ -9,6 +9,8 @@ import { getCompanyDiscoveryService } from "@/services/infrastructure/discovery/
 import { getCompanyExtractionService } from "@/services/infrastructure/ai/company-extraction.service.js";
 import { getLeadScoringService } from "@/services/infrastructure/ai/lead-scoring.service.js";
 import { getQueryParserService } from "@/services/infrastructure/ai/query-parser.service.js";
+import { getCrawlerConfig } from "@/lib/config/crawler.config.js";
+import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
 import { getWebsiteCrawlerService } from "@/services/infrastructure/crawler/website-crawler.service.js";
 import { getTextCleaningService } from "@/services/infrastructure/content/text-cleaning.service.js";
 
@@ -30,7 +32,13 @@ let cachedOrchestrator: ReturnType<typeof createSearchOrchestrator> | undefined;
 
 export function getSearchOrchestrator() {
   if (!cachedOrchestrator) {
-    cachedOrchestrator = createSearchOrchestrator(createDefaultSearchOrchestratorDependencies());
+    const crawlerConfig = getCrawlerConfig();
+    const pipelineConfig = getPipelineConfig();
+    cachedOrchestrator = createSearchOrchestrator(createDefaultSearchOrchestratorDependencies(), {
+      crawlConcurrency: crawlerConfig.CRAWLER_SEARCH_CONCURRENCY,
+      extractionConcurrency: pipelineConfig.SEARCH_EXTRACTION_CONCURRENCY,
+      scoringConcurrency: pipelineConfig.SEARCH_SCORING_CONCURRENCY,
+    });
   }
 
   return cachedOrchestrator;

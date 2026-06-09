@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/api-mappers.js";
 import { getSecurityConfig } from "@/lib/config/security.config.js";
 import type { CreateSearchRequestInput, GetSearchQueryInput } from "@/lib/validations/api/search.schema.js";
+import type { StaleSearchJobCleanupService } from "@/services/application/stale-search-job-cleanup.service.js";
 import type { SearchOrchestrator } from "@/services/application/search-orchestrator.service.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
 import type { LeadRepository } from "@/repositories/interfaces/lead.repository.interface.js";
@@ -17,6 +18,7 @@ export interface SearchApiServiceDependencies {
   searchRepository: SearchRepository;
   leadRepository: LeadRepository;
   searchOrchestrator: SearchOrchestrator;
+  staleSearchJobCleanup: StaleSearchJobCleanupService;
   scheduleBackgroundTask?: BackgroundTaskScheduler;
 }
 
@@ -27,6 +29,8 @@ export class SearchApiService {
     userId: string,
     input: CreateSearchRequestInput,
   ): Promise<CreateSearchResponse> {
+    await this.deps.staleSearchJobCleanup.cleanup({ userId });
+
     const security = getSecurityConfig();
     const activeJobs = await this.deps.searchRepository.countActiveJobsForUser(userId);
 

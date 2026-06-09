@@ -371,6 +371,290 @@ describe("SearchOrchestrator", () => {
     );
   });
 
+  it("crawls multiple companies in parallel up to crawlConcurrency", async () => {
+    let activeCrawls = 0;
+    let maxActiveCrawls = 0;
+
+    const companyIds = [
+      "00000000-0000-4000-8000-000000000010",
+      "00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000013",
+    ];
+
+    const searchResults = companyIds.map((id, index) => ({
+      id: `00000000-0000-4000-8000-00000000004${index}`,
+      searchJobId,
+      companyId: id,
+      stage: "DISCOVERED" as const,
+      rank: index + 1,
+      discoverySource: "discovery_agent",
+      discoveryUrl: `https://company-${index}.fi`,
+      stageError: null,
+      discoveredAt: new Date("2026-06-07T12:00:00.000Z"),
+      completedAt: null,
+      createdAt: new Date("2026-06-07T12:00:00.000Z"),
+      updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+    }));
+
+    const deps = createDependencies();
+    deps.companyDiscovery.discover = vi.fn().mockResolvedValue(
+      ok(
+        companyIds.map((_, index) => ({
+          companyName: `Company ${index}`,
+          website: `https://company-${index}.fi`,
+        })),
+      ),
+    );
+    deps.searchRepository.addDiscoveredCompanies = vi.fn().mockResolvedValue({
+      companies: [],
+      searchResults,
+      skippedDuplicates: 0,
+    });
+    deps.searchRepository.findResultsByJobId = vi.fn().mockImplementation((_jobId, options) => {
+      if (options?.stage === "CRAWLED") {
+        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "CRAWLED" as const })));
+      }
+
+      if (options?.stage === "EXTRACTED") {
+        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "EXTRACTED" as const })));
+      }
+
+      return Promise.resolve(searchResults);
+    });
+    deps.companyRepository.findById = vi.fn().mockImplementation((id: string) => {
+      const index = companyIds.indexOf(id);
+
+      return Promise.resolve({
+        id,
+        domain: `company-${index}.fi`,
+        normalizedDomain: `company-${index}.fi`,
+        name: `Company ${index}`,
+        websiteUrl: `https://company-${index}.fi`,
+        firstSeenAt: new Date("2026-06-07T12:00:00.000Z"),
+        lastCrawledAt: null,
+        createdAt: new Date("2026-06-07T12:00:00.000Z"),
+        updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+      });
+    });
+    deps.websiteCrawler.crawl = vi.fn().mockImplementation(async () => {
+      activeCrawls += 1;
+      maxActiveCrawls = Math.max(maxActiveCrawls, activeCrawls);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      activeCrawls -= 1;
+
+      return ok({
+        companyId: companyIds[0]!,
+        domain: "company-0.fi",
+        baseUrl: "https://company-0.fi",
+        status: "partial",
+        pagesSucceeded: 1,
+        pagesAttempted: 5,
+        durationMs: 30,
+        pages: [
+          {
+            path: "/about",
+            url: "https://company-0.fi/about",
+            httpStatus: 200,
+            title: "About",
+            contentText: "Freight and warehousing provider established since 1998 in Finland.",
+            html: "<html><body><p>Freight and warehousing provider established since 1998 in Finland with 150 employees.</p></body></html>",
+            crawledAt: "2026-06-07T12:00:00.000Z",
+          },
+        ],
+      });
+    });
+
+    const orchestrator = new SearchOrchestrator(deps, {
+      maxAttempts: 1,
+      crawlConcurrency: 3,
+    });
+
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland",
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.summary.crawled).toBe(4);
+      expect(maxActiveCrawls).toBe(3);
+    }
+
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledTimes(4);
+  });
+
+  it("extracts and scores multiple companies in parallel", async () => {
+    let activeExtractions = 0;
+    let maxActiveExtractions = 0;
+    let activeScorings = 0;
+    let maxActiveScorings = 0;
+
+    const companyIds = [
+      "00000000-0000-4000-8000-000000000010",
+      "00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000013",
+    ];
+
+    const searchResults = companyIds.map((id, index) => ({
+      id: `00000000-0000-4000-8000-00000000004${index}`,
+      searchJobId,
+      companyId: id,
+      stage: "DISCOVERED" as const,
+      rank: index + 1,
+      discoverySource: "discovery_agent",
+      discoveryUrl: `https://company-${index}.fi`,
+      stageError: null,
+      discoveredAt: new Date("2026-06-07T12:00:00.000Z"),
+      completedAt: null,
+      createdAt: new Date("2026-06-07T12:00:00.000Z"),
+      updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+    }));
+
+    const deps = createDependencies();
+    deps.companyDiscovery.discover = vi.fn().mockResolvedValue(
+      ok(
+        companyIds.map((_, index) => ({
+          companyName: `Company ${index}`,
+          website: `https://company-${index}.fi`,
+        })),
+      ),
+    );
+    deps.searchRepository.addDiscoveredCompanies = vi.fn().mockResolvedValue({
+      companies: [],
+      searchResults,
+      skippedDuplicates: 0,
+    });
+    deps.searchRepository.findResultsByJobId = vi.fn().mockImplementation((_jobId, options) => {
+      if (options?.stage === "CRAWLED") {
+        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "CRAWLED" as const })));
+      }
+
+      if (options?.stage === "EXTRACTED") {
+        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "EXTRACTED" as const })));
+      }
+
+      return Promise.resolve(searchResults);
+    });
+    deps.companyRepository.findById = vi.fn().mockImplementation((id: string) => {
+      const index = companyIds.indexOf(id);
+
+      return Promise.resolve({
+        id,
+        domain: `company-${index}.fi`,
+        normalizedDomain: `company-${index}.fi`,
+        name: `Company ${index}`,
+        websiteUrl: `https://company-${index}.fi`,
+        firstSeenAt: new Date("2026-06-07T12:00:00.000Z"),
+        lastCrawledAt: null,
+        createdAt: new Date("2026-06-07T12:00:00.000Z"),
+        updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+      });
+    });
+    deps.companyExtraction.extract = vi.fn().mockImplementation(async () => {
+      activeExtractions += 1;
+      maxActiveExtractions = Math.max(maxActiveExtractions, activeExtractions);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      activeExtractions -= 1;
+
+      return ok({
+        profile: extractedProfile,
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          contentHash: "hash-123",
+          extractedAt: "2026-06-07T12:00:00.000Z",
+          completeness: 0.9,
+        },
+      });
+    });
+    deps.leadScoring.score = vi.fn().mockImplementation(async () => {
+      activeScorings += 1;
+      maxActiveScorings = Math.max(maxActiveScorings, activeScorings);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      activeScorings -= 1;
+
+      return ok({
+        leadScore: {
+          score: 88.15,
+          confidence: 0.91,
+          explanation: "Strong logistics fit with aligned employee range.",
+          breakdown: {
+            industryFit: {
+              score: 100,
+              weight: 0.3,
+              weightedScore: 30,
+              confidence: 0.95,
+              rationale: "Exact industry match.",
+              signals: [],
+            },
+            sizeFit: {
+              score: 95,
+              weight: 0.25,
+              weightedScore: 23.75,
+              confidence: 0.9,
+              rationale: "Strong overlap.",
+              signals: [],
+            },
+            businessMaturity: {
+              score: 80,
+              weight: 0.25,
+              weightedScore: 20,
+              confidence: 0.8,
+              rationale: "Mature profile.",
+              signals: [],
+            },
+            growthIndicators: {
+              score: 60,
+              weight: 0.2,
+              weightedScore: 12,
+              confidence: 0.7,
+              rationale: "Moderate growth.",
+              signals: [],
+            },
+          },
+        },
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          scoredAt: "2026-06-07T12:00:00.000Z",
+          weights: {
+            industryFit: 0.3,
+            sizeFit: 0.25,
+            businessMaturity: 0.25,
+            growthIndicators: 0.2,
+          },
+        },
+      });
+    });
+
+    const orchestrator = new SearchOrchestrator(deps, {
+      maxAttempts: 1,
+      crawlConcurrency: 4,
+      extractionConcurrency: 3,
+      scoringConcurrency: 3,
+    });
+
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland",
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.summary.extracted).toBe(4);
+      expect(result.value.summary.scored).toBe(4);
+      expect(maxActiveExtractions).toBe(3);
+      expect(maxActiveScorings).toBe(3);
+    }
+
+    expect(deps.companyExtraction.extract).toHaveBeenCalledTimes(4);
+    expect(deps.leadScoring.score).toHaveBeenCalledTimes(4);
+  });
+
   it("continues when one company crawl fails and completes with partial failures", async () => {
     const secondResultId = "00000000-0000-4000-8000-000000000041";
     const secondCompanyId = "00000000-0000-4000-8000-000000000011";

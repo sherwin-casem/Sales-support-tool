@@ -130,6 +130,41 @@ describe("PrismaSearchRepository", () => {
     expect(result.stage).toBe("CRAWLED");
   });
 
+  it("fails stale pending and active jobs", async () => {
+    const prisma = createMockPrismaClient();
+    const staleJob = createMockSearchJob({ status: "PENDING" });
+    const failedJob = {
+      ...staleJob,
+      status: "FAILED" as const,
+      errorMessage: "Search timed out or was interrupted. Start a new search.",
+      completedAt: new Date("2026-06-09T12:00:00.000Z"),
+    };
+
+    prisma.searchJob.findMany
+      .mockResolvedValueOnce([{ id: staleJob.id }])
+      .mockResolvedValueOnce([failedJob]);
+    prisma.searchJob.updateMany.mockResolvedValue({ count: 1 });
+
+    const repository = new PrismaSearchRepository(prisma);
+    const result = await repository.failStaleJobs({
+      userId: staleJob.userId,
+      pendingStaleBefore: new Date("2026-06-09T11:55:00.000Z"),
+      activeStaleBefore: new Date("2026-06-09T11:40:00.000Z"),
+      errorMessage: "Search timed out or was interrupted. Start a new search.",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.status).toBe("FAILED");
+    expect(prisma.searchJob.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [staleJob.id] } },
+      data: {
+        status: "FAILED",
+        errorMessage: "Search timed out or was interrupted. Start a new search.",
+        completedAt: expect.any(Date),
+      },
+    });
+  });
+
   it("updates search job status and criteria", async () => {
     const prisma = createMockPrismaClient();
     const job = createMockSearchJob();
