@@ -1,10 +1,10 @@
-Enrich lead data for this company.
+Build a lead profile for this company.
 
 Company: {{companyName}}
 Website: {{website}}
 Domain: {{domain}}
 
-Website-extracted profile (prefer these values when not unknown):
+Known context from discovery (use when helpful, otherwise research via web search):
 {{websiteProfile}}
 
-Use web search to fill unknown or missing fields. Return a complete enriched profile.
+Use web search to produce a complete enriched profile suitable for B2B sales outreach.

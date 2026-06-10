@@ -229,7 +229,7 @@ function createDependencies(
 }
 
 describe("SearchOrchestrator", () => {
-  it("runs the full search pipeline successfully", async () => {
+  it("runs the hybrid enrichment pipeline successfully", async () => {
     const deps = createDependencies();
     const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
 
@@ -243,8 +243,8 @@ describe("SearchOrchestrator", () => {
     if (result.ok) {
       expect(result.value.status).toBe("COMPLETED");
       expect(result.value.summary.discovered).toBe(1);
-      expect(result.value.summary.crawled).toBe(1);
-      expect(result.value.summary.extracted).toBe(1);
+      expect(result.value.summary.crawled).toBe(0);
+      expect(result.value.summary.extracted).toBe(0);
       expect(result.value.summary.enriched).toBe(1);
       expect(result.value.summary.failed).toBe(0);
     }
@@ -255,7 +255,63 @@ describe("SearchOrchestrator", () => {
       expect.any(Object),
     );
     expect(deps.leadEnrichment.enrich).toHaveBeenCalledOnce();
-    expect(deps.companyRepository.saveProfile).toHaveBeenCalledTimes(2);
+    expect(deps.websiteCrawler.crawl).not.toHaveBeenCalled();
+    expect(deps.companyRepository.saveProfile).toHaveBeenCalledOnce();
+  });
+
+  it("supplements web enrichment with contact-page crawl when outreach gaps remain", async () => {
+    const deps = createDependencies();
+    deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
+      ok({
+        profile: createExtractedCompanyProfile({
+          city: "helsinki",
+          country: "finland",
+          decisionMaker: "unknown",
+          linkedInUrl: null,
+          email: null,
+        }),
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          enrichedAt: "2026-06-07T12:02:00.000Z",
+        },
+      }),
+    );
+    deps.companyExtraction.extract = vi.fn().mockResolvedValue(
+      ok({
+        profile: createExtractedCompanyProfile({
+          decisionMaker: "Jane Doe, CEO",
+          email: "info@acme.fi",
+          linkedInUrl: "https://linkedin.com/company/acme",
+        }),
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          contentHash: "hash-contact",
+          extractedAt: "2026-06-07T12:01:00.000Z",
+          completeness: 0.8,
+        },
+      }),
+    );
+
+    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.summary.crawled).toBe(1);
+      expect(result.value.summary.extracted).toBe(1);
+      expect(result.value.summary.enriched).toBe(1);
+    }
+
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paths: ["/contact", "/about", "/team"],
+      }),
+    );
   });
 
   it("retries query parsing before failing the job", async () => {
@@ -308,7 +364,7 @@ describe("SearchOrchestrator", () => {
     );
   });
 
-  it("crawls multiple companies in parallel up to crawlConcurrency", async () => {
+  it("runs contact crawl for multiple companies when outreach gaps remain", async () => {
     let activeCrawls = 0;
     let maxActiveCrawls = 0;
 
@@ -335,6 +391,20 @@ describe("SearchOrchestrator", () => {
     }));
 
     const deps = createDependencies();
+    deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
+      ok({
+        profile: createExtractedCompanyProfile({
+          decisionMaker: "unknown",
+          linkedInUrl: null,
+          email: null,
+        }),
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          enrichedAt: "2026-06-07T12:02:00.000Z",
+        },
+      }),
+    );
     deps.companyDiscovery.discover = vi.fn().mockResolvedValue(
       ok(
         companyIds.map((_, index) => ({
@@ -348,17 +418,7 @@ describe("SearchOrchestrator", () => {
       searchResults,
       skippedDuplicates: 0,
     });
-    deps.searchRepository.findResultsByJobId = vi.fn().mockImplementation((_jobId, options) => {
-      if (options?.stage === "CRAWLED") {
-        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "CRAWLED" as const })));
-      }
-
-      if (options?.stage === "EXTRACTED") {
-        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "EXTRACTED" as const })));
-      }
-
-      return Promise.resolve(searchResults);
-    });
+    deps.searchRepository.findResultsByJobId = vi.fn().mockResolvedValue(searchResults);
     deps.companyRepository.findById = vi.fn().mockImplementation((id: string) => {
       const index = companyIds.indexOf(id);
 
@@ -404,7 +464,7 @@ describe("SearchOrchestrator", () => {
 
     const orchestrator = new SearchOrchestrator(deps, {
       maxAttempts: 1,
-      crawlConcurrency: 3,
+      enrichmentConcurrency: 3,
     });
 
     const result = await orchestrator.run({
@@ -416,15 +476,15 @@ describe("SearchOrchestrator", () => {
 
     if (result.ok) {
       expect(result.value.summary.crawled).toBe(4);
+      expect(result.value.summary.extracted).toBe(4);
+      expect(result.value.summary.enriched).toBe(4);
       expect(maxActiveCrawls).toBe(3);
     }
 
     expect(deps.websiteCrawler.crawl).toHaveBeenCalledTimes(4);
   });
 
-  it("extracts and enriches multiple companies in parallel", async () => {
-    let activeExtractions = 0;
-    let maxActiveExtractions = 0;
+  it("enriches multiple companies in parallel", async () => {
     let activeEnrichments = 0;
     let maxActiveEnrichments = 0;
 
@@ -464,17 +524,7 @@ describe("SearchOrchestrator", () => {
       searchResults,
       skippedDuplicates: 0,
     });
-    deps.searchRepository.findResultsByJobId = vi.fn().mockImplementation((_jobId, options) => {
-      if (options?.stage === "CRAWLED") {
-        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "CRAWLED" as const })));
-      }
-
-      if (options?.stage === "EXTRACTED") {
-        return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "EXTRACTED" as const })));
-      }
-
-      return Promise.resolve(searchResults);
-    });
+    deps.searchRepository.findResultsByJobId = vi.fn().mockResolvedValue(searchResults);
     deps.companyRepository.findById = vi.fn().mockImplementation((id: string) => {
       const index = companyIds.indexOf(id);
 
@@ -490,23 +540,6 @@ describe("SearchOrchestrator", () => {
         updatedAt: new Date("2026-06-07T12:00:00.000Z"),
       });
     });
-    deps.companyExtraction.extract = vi.fn().mockImplementation(async () => {
-      activeExtractions += 1;
-      maxActiveExtractions = Math.max(maxActiveExtractions, activeExtractions);
-      await new Promise((resolve) => setTimeout(resolve, 30));
-      activeExtractions -= 1;
-
-      return ok({
-        profile: extractedProfile,
-        meta: {
-          promptVersion: "v1",
-          modelUsed: "gpt-4o",
-          contentHash: "hash-123",
-          extractedAt: "2026-06-07T12:00:00.000Z",
-          completeness: 0.9,
-        },
-      });
-    });
     deps.leadEnrichment.enrich = vi.fn().mockImplementation(async () => {
       activeEnrichments += 1;
       maxActiveEnrichments = Math.max(maxActiveEnrichments, activeEnrichments);
@@ -518,6 +551,9 @@ describe("SearchOrchestrator", () => {
           ...extractedProfile,
           city: "helsinki",
           country: "finland",
+          decisionMaker: "Jane Doe, CEO",
+          linkedInUrl: "https://linkedin.com/company/acme",
+          email: "info@acme.fi",
         },
         meta: {
           promptVersion: "v1",
@@ -529,8 +565,6 @@ describe("SearchOrchestrator", () => {
 
     const orchestrator = new SearchOrchestrator(deps, {
       maxAttempts: 1,
-      crawlConcurrency: 4,
-      extractionConcurrency: 3,
       enrichmentConcurrency: 3,
     });
 
@@ -542,17 +576,16 @@ describe("SearchOrchestrator", () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.value.summary.extracted).toBe(4);
+      expect(result.value.summary.crawled).toBe(0);
       expect(result.value.summary.enriched).toBe(4);
-      expect(maxActiveExtractions).toBe(3);
       expect(maxActiveEnrichments).toBe(3);
     }
 
-    expect(deps.companyExtraction.extract).toHaveBeenCalledTimes(4);
+    expect(deps.websiteCrawler.crawl).not.toHaveBeenCalled();
     expect(deps.leadEnrichment.enrich).toHaveBeenCalledTimes(4);
   });
 
-  it("continues when one company crawl fails and completes with partial failures", async () => {
+  it("continues when one company enrichment fails and completes with partial failures", async () => {
     const secondResultId = "00000000-0000-4000-8000-000000000041";
     const secondCompanyId = "00000000-0000-4000-8000-000000000011";
 
@@ -594,17 +627,7 @@ describe("SearchOrchestrator", () => {
       skippedDuplicates: 0,
     });
 
-    deps.searchRepository.findResultsByJobId = vi.fn().mockImplementation((_jobId, options) => {
-      if (options?.stage === "CRAWLED") {
-        return Promise.resolve([{ ...searchResults[0]!, stage: "CRAWLED" as const }]);
-      }
-
-      if (options?.stage === "EXTRACTED") {
-        return Promise.resolve([{ ...searchResults[0]!, stage: "EXTRACTED" as const }]);
-      }
-
-      return Promise.resolve(searchResults);
-    });
+    deps.searchRepository.findResultsByJobId = vi.fn().mockResolvedValue(searchResults);
 
     deps.companyRepository.findById = vi.fn().mockImplementation((id: string) => {
       if (id === companyId) {
@@ -644,11 +667,10 @@ describe("SearchOrchestrator", () => {
 
     if (result.ok) {
       expect(result.value.status).toBe("COMPLETED");
-      expect(result.value.summary.crawled).toBe(1);
       expect(result.value.summary.enriched).toBe(1);
       expect(result.value.summary.failed).toBe(1);
       expect(result.value.failures).toHaveLength(1);
-      expect(result.value.failures[0]?.stage).toBe("CRAWL_FAILED");
+      expect(result.value.failures[0]?.stage).toBe("ENRICH_FAILED");
     }
   });
 

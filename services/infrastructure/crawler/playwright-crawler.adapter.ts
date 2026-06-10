@@ -9,11 +9,12 @@ import type {
   PageCrawlerPort,
 } from "@/services/infrastructure/crawler/browser-pool.port.js";
 import { CrawlError } from "@/types/crawler/crawler-error.types.js";
-import type {
-  CrawlCompanyInput,
-  CrawlCompanyResult,
-  CrawlCompanyStatus,
-  CrawledPage,
+import {
+  CRAWL_PATHS,
+  type CrawlCompanyInput,
+  type CrawlCompanyResult,
+  type CrawlCompanyStatus,
+  type CrawledPage,
 } from "@/types/crawler/crawler.types.js";
 
 function sleep(ms: number): Promise<void> {
@@ -43,6 +44,7 @@ export class PlaywrightCrawlerAdapter {
     const targets = crawlPathResolverService.resolve(
       input.website,
       input.normalizedDomain,
+      input.paths ?? CRAWL_PATHS,
     );
     const baseUrl = new URL(targets[0]?.url ?? input.website).origin;
 
