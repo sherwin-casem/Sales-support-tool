@@ -273,7 +273,7 @@ export class PrismaSearchRepository implements SearchRepository {
     const client = resolveDbClient(this.prisma, tx);
     const completedAt = new Date();
     const activePipelineStatuses = ACTIVE_SEARCH_JOB_STATUSES.filter(
-      (status) => status !== SearchJobStatus.PENDING,
+      (status) => status !== "PENDING",
     );
 
     const staleJobs = await client.searchJob.findMany({

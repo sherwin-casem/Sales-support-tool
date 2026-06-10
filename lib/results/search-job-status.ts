@@ -1,15 +1,14 @@
-import type { SearchJobStatus } from "@prisma/client";
+import { SearchJobStatus } from "@prisma/client";
 
-export const ACTIVE_SEARCH_JOB_STATUSES = [
-  "PENDING",
-  "DISCOVERING",
-  "CRAWLING",
-  "EXTRACTING",
-  "ENRICHING",
-] as const;
+export const ACTIVE_SEARCH_JOB_STATUSES: readonly SearchJobStatus[] = [
+  SearchJobStatus.PENDING,
+  SearchJobStatus.DISCOVERING,
+  SearchJobStatus.CRAWLING,
+  SearchJobStatus.EXTRACTING,
+];
 
 export function isSearchJobActive(status: SearchJobStatus): boolean {
-  return (ACTIVE_SEARCH_JOB_STATUSES as readonly string[]).includes(status);
+  return ACTIVE_SEARCH_JOB_STATUSES.includes(status);
 }
 
 export function formatSearchJobStatus(status: SearchJobStatus): string {
