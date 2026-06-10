@@ -5,6 +5,7 @@ export const ACTIVE_SEARCH_JOB_STATUSES: readonly SearchJobStatus[] = [
   SearchJobStatus.DISCOVERING,
   SearchJobStatus.CRAWLING,
   SearchJobStatus.EXTRACTING,
+  SearchJobStatus.ENRICHING,
 ];
 
 export function isSearchJobActive(status: SearchJobStatus): boolean {

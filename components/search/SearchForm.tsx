@@ -16,12 +16,15 @@ export function SearchForm() {
   const queryFieldId = useId();
   const limitFieldId = useId();
   const [query, setQuery] = useState("");
-  const [companyLimit, setCompanyLimit] = useState<number>(25);
+  const [companyLimit, setCompanyLimit] = useState<string>("");
   const { submit, isSubmitting, fieldErrors, formError } = useCreateSearch();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await submit({ query, companyLimit });
+    await submit({
+      query,
+      companyLimit: companyLimit === "" ? null : Number(companyLimit),
+    });
   }
 
   return (
@@ -65,10 +68,11 @@ export function SearchForm() {
           name="companyLimit"
           label="Company limit"
           value={companyLimit}
-          onChange={(event) => setCompanyLimit(Number(event.target.value))}
+          onChange={(event) => setCompanyLimit(event.target.value)}
           error={fieldErrors.companyLimit}
           disabled={isSubmitting}
         >
+          <option value="">No limit</option>
           {COMPANY_LIMIT_OPTIONS.map((limit) => (
             <option key={limit} value={limit}>
               {limit} companies

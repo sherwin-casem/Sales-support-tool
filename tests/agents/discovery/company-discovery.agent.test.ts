@@ -153,6 +153,30 @@ describe("CompanyDiscoveryAgent", () => {
     expect(createWebDiscoveryCompletion).not.toHaveBeenCalled();
   });
 
+  it("does not cap results when no limit is provided", async () => {
+    const createWebDiscoveryCompletion = vi.fn().mockResolvedValue(
+      JSON.stringify({
+        companies: Array.from({ length: 3 }, (_, index) => ({
+          companyName: `Company ${index}`,
+          website: `https://company-${index}.fi`,
+        })),
+      }),
+    );
+
+    const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
+      model: "gpt-4o-mini",
+    });
+
+    const result = await agent.execute({
+      query: "logistics companies in Finland",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(3);
+    }
+  });
+
   it("retries when OpenAI returns invalid JSON", async () => {
     const createWebDiscoveryCompletion = vi
       .fn()

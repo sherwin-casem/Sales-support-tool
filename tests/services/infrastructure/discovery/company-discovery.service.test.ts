@@ -59,10 +59,51 @@ describe("CompanyDiscoveryService", () => {
 
     const result = await service.discover({
       query: "companies in Finland",
+      limit: 10,
     });
 
     expect(result.ok).toBe(true);
     expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs multiple discovery rounds when no limit is set", async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(
+        ok([
+          {
+            companyName: "Acme Logistics",
+            website: "https://acme.fi",
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        ok([
+          {
+            companyName: "Other Logistics",
+            website: "https://other.fi",
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(ok([]));
+
+    const agent = { execute } as unknown as CompanyDiscoveryAgent;
+    const service = new CompanyDiscoveryService(agent, {
+      maxAttempts: 1,
+      unlimitedMaxRounds: 3,
+    });
+
+    const result = await service.discover({
+      query: "logistics companies in Finland",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(2);
+    }
+
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute.mock.calls[1]?.[0].excludedWebsites).toEqual(["https://acme.fi"]);
   });
 
   it("maps discovery errors", async () => {

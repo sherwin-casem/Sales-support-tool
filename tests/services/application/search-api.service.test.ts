@@ -17,7 +17,7 @@ function baseJob() {
     query: "logistics companies in Finland",
     criteria: {},
     status: "PENDING" as const,
-    companyLimit: 25,
+    companyLimit: null,
     errorMessage: null,
     startedAt: null,
     completedAt: null,
@@ -31,7 +31,13 @@ function createDependencies(
 ): SearchApiServiceDependencies {
   return {
     searchRepository: {
-      createJob: vi.fn().mockResolvedValue(createJob()),
+      createJob: vi.fn().mockImplementation((input) =>
+        Promise.resolve(
+          createJob({
+            companyLimit: input.companyLimit ?? null,
+          }),
+        ),
+      ),
       findJobByIdForUser: vi.fn().mockResolvedValue(createJob()),
       findResultsByJobId: vi.fn().mockResolvedValue([]),
       countActiveJobsForUser: vi.fn().mockResolvedValue(0),
@@ -61,7 +67,7 @@ describe("SearchApiService", () => {
 
     expect(result.id).toBe(searchJobId);
     expect(result.status).toBe("PENDING");
-    expect(result.companyLimit).toBe(25);
+    expect(result.companyLimit).toBe(10);
     expect(result.links.self).toBe(`/api/v1/search/${searchJobId}`);
     expect(deps.searchRepository.createJob).toHaveBeenCalledWith({
       userId,

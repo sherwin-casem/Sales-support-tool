@@ -8,7 +8,7 @@ export interface SearchJobRecord {
   query: string;
   criteria: ParsedQuery | Record<string, unknown>;
   status: SearchJobStatus;
-  companyLimit: number;
+  companyLimit: number | null;
   errorMessage: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -35,7 +35,7 @@ export interface CreateSearchJobInput {
   userId: string;
   query: string;
   criteria?: ParsedQuery | Record<string, unknown>;
-  companyLimit?: number;
+  companyLimit?: number | null;
 }
 
 export interface DiscoveredCompanyInput {
