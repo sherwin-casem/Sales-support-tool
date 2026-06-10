@@ -11,7 +11,6 @@ export const SearchIdParamsSchema = z.object({
 });
 
 export const GetSearchQuerySchema = z.object({
-  minScore: z.coerce.number().min(0).max(100).optional(),
   stage: z
     .enum([
       "DISCOVERED",
@@ -21,9 +20,9 @@ export const GetSearchQuerySchema = z.object({
       "EXTRACTING",
       "EXTRACT_FAILED",
       "EXTRACTED",
-      "SCORING",
-      "SCORE_FAILED",
-      "SCORED",
+      "ENRICHING",
+      "ENRICH_FAILED",
+      "ENRICHED",
     ])
     .optional(),
   includeFailures: z

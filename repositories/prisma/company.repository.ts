@@ -1,6 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
-import type { LeadScore } from "@prisma/client";
 import { resolveDbClient, type DbClient } from "@/lib/db/db-client.types.js";
 import { isUniqueConstraintError } from "@/lib/db/prisma-errors.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
@@ -8,7 +7,6 @@ import type { CompanyRepository } from "@/repositories/interfaces/company.reposi
 import {
   mapCompany,
   mapCompanyProfile,
-  mapLeadScore,
   toDecimal,
 } from "@/repositories/prisma/mappers.js";
 import {
@@ -361,14 +359,12 @@ export class PrismaCompanyRepository implements CompanyRepository {
       },
       include: {
         searchJob: true,
-        leadScore: true,
       },
       orderBy: { discoveredAt: "desc" },
       take: 10,
     });
 
     const mappedProfiles = profiles.map(mapCompanyProfile);
-    const latestLeadScore = findLatestLeadScore(recentSearches);
 
     return {
       ...mapCompany(company),
@@ -385,32 +381,10 @@ export class PrismaCompanyRepository implements CompanyRepository {
         query: result.searchJob.query,
         stage: result.stage,
         rank: result.rank,
-        leadScore: result.leadScore?.totalScore.toNumber() ?? null,
         searchedAt: result.discoveredAt,
       })),
-      latestLeadScore,
     };
   }
-}
-
-function findLatestLeadScore(
-  searchResults: Array<{ leadScore: LeadScore | null }>,
-): ReturnType<typeof mapLeadScore> | null {
-  let latest: ReturnType<typeof mapLeadScore> | null = null;
-
-  for (const result of searchResults) {
-    if (!result.leadScore) {
-      continue;
-    }
-
-    const mapped = mapLeadScore(result.leadScore);
-
-    if (!latest || mapped.scoredAt > latest.scoredAt) {
-      latest = mapped;
-    }
-  }
-
-  return latest;
 }
 
 function buildCompanyOrderBy(

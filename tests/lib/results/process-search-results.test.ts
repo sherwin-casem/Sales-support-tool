@@ -10,33 +10,18 @@ import {
 function createResult(
   searchResultId: string,
   company: SearchResultItemResponse["company"],
-  score: number | null,
   rank: number | null = null,
 ): SearchResultItemResponse {
   return {
     searchResultId,
     rank,
-    stage: "SCORED",
+    stage: "ENRICHED",
     stageError: null,
     discoveredAt: "2026-06-07T12:00:00.000Z",
     completedAt: null,
     company,
     profile: null,
     profileCompleteness: null,
-    leadScore:
-      score === null
-        ? null
-        : {
-            score,
-            confidence: 0.8,
-            explanation: `Explanation for ${company.domain}`,
-            breakdown: {} as SearchResultItemResponse["leadScore"] extends infer T
-              ? T extends { breakdown: infer B } | null
-                ? B
-                : never
-              : never,
-            scoredAt: "2026-06-07T12:00:00.000Z",
-          },
   };
 }
 
@@ -50,7 +35,6 @@ describe("process-search-results", () => {
         domain: "beta.fi",
         websiteUrl: null,
       },
-      72,
       2,
     ),
     createResult(
@@ -61,7 +45,6 @@ describe("process-search-results", () => {
         domain: "acme.fi",
         websiteUrl: null,
       },
-      88,
       1,
     ),
   ];

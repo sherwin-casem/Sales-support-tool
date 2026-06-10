@@ -1,7 +1,6 @@
 import type { SearchResultStage } from "@prisma/client";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 import type { PaginationMeta } from "@/types/api/pagination.api.types.js";
-import type { LeadScoreSummaryResponse } from "@/types/api/search.api.types.js";
 
 export interface ListCompaniesQuery {
   page?: number;
@@ -59,7 +58,6 @@ export interface CompanySearchAppearanceResponse {
   query: string;
   stage: SearchResultStage;
   rank: number | null;
-  leadScore: number | null;
   searchedAt: string;
 }
 
@@ -76,11 +74,4 @@ export interface GetCompanyResponse {
   profile: CompanyProfileDetailResponse | null;
   profileHistory: ProfileVersionSummaryResponse[];
   recentSearches: CompanySearchAppearanceResponse[];
-  latestLeadScore: CompanyLeadScoreResponse | null;
-}
-
-export interface CompanyLeadScoreResponse extends LeadScoreSummaryResponse {
-  searchJobId: string;
-  searchResultId: string;
-  query: string;
 }

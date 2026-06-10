@@ -36,10 +36,6 @@ export type MockPrismaClient = PrismaClient & {
     findUnique: MockFn;
     update: MockFn;
   };
-  leadScore: {
-    findUnique: MockFn;
-    upsert: MockFn;
-  };
   $transaction: MockFn;
 };
 
@@ -179,63 +175,6 @@ export function createMockSearchResult(overrides: Partial<{
   };
 }
 
-export function createMockLeadScore(overrides: Partial<{
-  id: string;
-  searchResultId: string;
-  searchJobId: string;
-}> = {}) {
-  const now = new Date("2026-06-07T12:00:00.000Z");
-
-  return {
-    id: overrides.id ?? "00000000-0000-4000-8000-000000000050",
-    searchResultId:
-      overrides.searchResultId ?? "00000000-0000-4000-8000-000000000040",
-    searchJobId: overrides.searchJobId ?? "00000000-0000-4000-8000-000000000030",
-    totalScore: new Prisma.Decimal("88.15"),
-    confidence: new Prisma.Decimal("0.910"),
-    breakdown: {
-      industryFit: {
-        score: 100,
-        weight: 0.3,
-        weightedScore: 30,
-        confidence: 0.95,
-        rationale: "Exact industry match.",
-        signals: [],
-      },
-      sizeFit: {
-        score: 95,
-        weight: 0.25,
-        weightedScore: 23.75,
-        confidence: 0.9,
-        rationale: "Strong overlap.",
-        signals: [],
-      },
-      businessMaturity: {
-        score: 80,
-        weight: 0.25,
-        weightedScore: 20,
-        confidence: 0.8,
-        rationale: "Mature profile.",
-        signals: [],
-      },
-      growthIndicators: {
-        score: 60,
-        weight: 0.2,
-        weightedScore: 12,
-        confidence: 0.7,
-        rationale: "Moderate growth.",
-        signals: [],
-      },
-    },
-    rationale: "Strong logistics fit.",
-    modelUsed: "gpt-4o",
-    promptVersion: "v1",
-    scoredAt: now,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 export function createMockPrismaClient() {
   const client = {
     company: {
@@ -262,10 +201,6 @@ export function createMockPrismaClient() {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
-    },
-    leadScore: {
-      findUnique: vi.fn(),
-      upsert: vi.fn(),
     },
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback(client),

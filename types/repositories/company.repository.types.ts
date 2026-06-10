@@ -1,5 +1,4 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
-import type { LeadScoreRecord } from "@/types/repositories/lead.repository.types.js";
 
 export interface CompanyRecord {
   id: string;
@@ -83,7 +82,6 @@ export interface CompanySearchAppearanceRecord {
   query: string;
   stage: import("@prisma/client").SearchResultStage;
   rank: number | null;
-  leadScore: number | null;
   searchedAt: Date;
 }
 
@@ -96,5 +94,4 @@ export interface CompanyDetailRecord extends CompanyRecord {
     contentHash: string | null;
   }>;
   recentSearches: CompanySearchAppearanceRecord[];
-  latestLeadScore: LeadScoreRecord | null;
 }
