@@ -12,7 +12,7 @@ export default function SearchPage() {
         </h1>
         <p className="max-w-2xl text-base text-slate-600">
           Describe who you are looking for in plain language. We will discover,
-          crawl, and score matching companies from public web data.
+          crawl, and enrich matching companies from public web data.
         </p>
       </div>
 

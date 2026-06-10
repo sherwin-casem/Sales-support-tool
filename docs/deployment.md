@@ -23,7 +23,7 @@ flowchart TB
   end
 
   subgraph external [External Services]
-    OpenAI[OpenAI API<br/>discovery + extraction + scoring]
+    OpenAI[OpenAI API<br/>discovery + extraction + enrichment]
   end
 
   subgraph worker [Recommended: Crawler Worker]
@@ -124,7 +124,7 @@ Set `CRAWLER_SEARCH_CONCURRENCY`, `CRAWLER_MAX_CONTEXTS`, and `CRAWLER_GLOBAL_CO
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SEARCH_EXTRACTION_CONCURRENCY` | `3` | Companies extracted in parallel per search job |
-| `SEARCH_SCORING_CONCURRENCY` | `3` | Leads scored in parallel per search job |
+| `SEARCH_ENRICHMENT_CONCURRENCY` | `3` | Leads enriched in parallel per search job |
 
 Both stages call OpenAI. Keep concurrency modest to avoid rate limits; start at `3` and raise only if your API tier allows it.
 
@@ -132,7 +132,7 @@ Both stages call OpenAI. Keep concurrency modest to avoid rate limits; start at 
 
 Company discovery uses the OpenAI Responses API with the built-in **web search** tool. The full natural-language search query is sent to the model (industry and location are optional hints from the query parser).
 
-Use a web-search-capable model via `OPENAI_MODEL` (for example `gpt-4o-mini` or `gpt-4o`). Discovery shares the same API key as extraction and scoring.
+Use a web-search-capable model via `OPENAI_MODEL` (for example `gpt-4o-mini` or `gpt-4o`). Discovery shares the same API key as extraction and enrichment.
 
 ### Neon / Vercel Postgres connection strings
 

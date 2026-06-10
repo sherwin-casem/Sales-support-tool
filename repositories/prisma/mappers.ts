@@ -1,18 +1,15 @@
 import type {
   Company,
   CompanyProfile,
-  LeadScore,
   SearchJob,
   SearchResult,
 } from "@prisma/client";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
-import type { ScoreBreakdown } from "@/types/agents/lead-scoring.types.js";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type {
   CompanyProfileRecord,
   CompanyRecord,
 } from "@/types/repositories/company.repository.types.js";
-import type { LeadScoreRecord } from "@/types/repositories/lead.repository.types.js";
 import type {
   SearchJobRecord,
   SearchResultRecord,
@@ -47,23 +44,6 @@ export function mapCompanyProfile(record: CompanyProfile): CompanyProfileRecord 
     promptVersion: record.promptVersion,
     contentHash: record.contentHash,
     extractedAt: record.extractedAt,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  };
-}
-
-export function mapLeadScore(record: LeadScore): LeadScoreRecord {
-  return {
-    id: record.id,
-    searchResultId: record.searchResultId,
-    searchJobId: record.searchJobId,
-    totalScore: decimalToNumber(record.totalScore) ?? 0,
-    confidence: decimalToNumber(record.confidence) ?? 0,
-    breakdown: record.breakdown as unknown as ScoreBreakdown,
-    rationale: record.rationale,
-    modelUsed: record.modelUsed,
-    promptVersion: record.promptVersion,
-    scoredAt: record.scoredAt,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -104,8 +84,4 @@ export function mapSearchResult(record: SearchResult): SearchResultRecord {
 
 export function toDecimal(value: number): string {
   return value.toFixed(3);
-}
-
-export function toScoreDecimal(value: number): string {
-  return value.toFixed(2);
 }

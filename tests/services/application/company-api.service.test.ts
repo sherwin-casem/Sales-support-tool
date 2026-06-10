@@ -87,7 +87,6 @@ describe("CompanyApiService", () => {
           profile: null,
           profileHistory: [],
           recentSearches: [],
-          latestLeadScore: null,
         }),
       } as unknown as CompanyApiServiceDependencies["companyRepository"],
     });

@@ -13,7 +13,6 @@ import type {
   CompanySummaryResponse,
   CreateSearchResponse,
   GetSearchResponse,
-  LeadScoreSummaryResponse,
   SearchResultItemResponse,
   SearchStageFailureResponse,
   SearchSummaryResponse,
@@ -29,7 +28,7 @@ import { toIsoString } from "@/lib/api/request-utils.js";
 const FAILED_STAGES: SearchResultStage[] = [
   "CRAWL_FAILED",
   "EXTRACT_FAILED",
-  "SCORE_FAILED",
+  "ENRICH_FAILED",
 ];
 
 export function mapCreateSearchResponse(job: SearchJobRecord): CreateSearchResponse {
@@ -51,9 +50,9 @@ export function buildSearchSummary(
 ): SearchSummaryResponse {
   return {
     discovered: results.length,
-    crawled: countByStages(results, ["CRAWLED", "EXTRACTING", "EXTRACT_FAILED", "EXTRACTED", "SCORING", "SCORE_FAILED", "SCORED"]),
-    extracted: countByStages(results, ["EXTRACTED", "SCORING", "SCORE_FAILED", "SCORED"]),
-    enriched: countByStage(results, "SCORED"),
+    crawled: countByStages(results, ["CRAWLED", "EXTRACTING", "EXTRACT_FAILED", "EXTRACTED", "ENRICHING", "ENRICH_FAILED", "ENRICHED"]),
+    extracted: countByStages(results, ["EXTRACTED", "ENRICHING", "ENRICH_FAILED", "ENRICHED"]),
+    enriched: countByStage(results, "ENRICHED"),
     failed: results.filter((result) => FAILED_STAGES.includes(result.stage)).length,
     skippedDuplicates,
   };
@@ -118,12 +117,6 @@ export function mapCompanyListItem(item: CompanyListItemRecord): CompanyListItem
 }
 
 export function mapGetCompanyResponse(detail: CompanyDetailRecord): GetCompanyResponse {
-  const latestAppearance = detail.latestLeadScore
-    ? detail.recentSearches.find(
-        (appearance) => appearance.searchResultId === detail.latestLeadScore?.searchResultId,
-      )
-    : undefined;
-
   return {
     id: detail.id,
     name: detail.name,
@@ -137,18 +130,6 @@ export function mapGetCompanyResponse(detail: CompanyDetailRecord): GetCompanyRe
     profile: detail.profile ? mapCompanyProfileDetail(detail.profile) : null,
     profileHistory: detail.profileHistory.map(mapProfileVersionSummary),
     recentSearches: detail.recentSearches.map(mapCompanySearchAppearance),
-    latestLeadScore: detail.latestLeadScore
-      ? {
-          searchJobId: detail.latestLeadScore.searchJobId,
-          searchResultId: detail.latestLeadScore.searchResultId,
-          query: latestAppearance?.query ?? "Unknown search",
-          score: detail.latestLeadScore.totalScore,
-          confidence: detail.latestLeadScore.confidence,
-          explanation: detail.latestLeadScore.rationale,
-          breakdown: detail.latestLeadScore.breakdown,
-          scoredAt: detail.latestLeadScore.scoredAt.toISOString(),
-        }
-      : null,
   };
 }
 
@@ -166,7 +147,6 @@ function mapSearchResultItem(
     company: mapCompanySummary(result.company),
     profile: result.profile?.structuredData ?? null,
     profileCompleteness: result.profile?.completeness ?? null,
-    leadScore: result.leadScore ? mapLeadScoreSummary(result.leadScore) : null,
   };
 }
 
@@ -176,18 +156,6 @@ function mapCompanySummary(company: RankedLeadRecord["company"]): CompanySummary
     name: company.name,
     domain: company.domain,
     websiteUrl: company.websiteUrl,
-  };
-}
-
-function mapLeadScoreSummary(
-  leadScore: NonNullable<RankedLeadRecord["leadScore"]>,
-): LeadScoreSummaryResponse {
-  return {
-    score: leadScore.totalScore,
-    confidence: leadScore.confidence,
-    explanation: leadScore.rationale,
-    breakdown: leadScore.breakdown,
-    scoredAt: leadScore.scoredAt.toISOString(),
   };
 }
 
@@ -237,7 +205,6 @@ function mapCompanySearchAppearance(
     query: appearance.query,
     stage: appearance.stage,
     rank: appearance.rank,
-    leadScore: appearance.leadScore,
     searchedAt: appearance.searchedAt.toISOString(),
   };
 }

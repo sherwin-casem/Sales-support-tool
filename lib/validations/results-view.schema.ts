@@ -16,9 +16,9 @@ export const SEARCH_RESULT_STAGES = [
   "EXTRACTING",
   "EXTRACT_FAILED",
   "EXTRACTED",
-  "SCORING",
-  "SCORE_FAILED",
-  "SCORED",
+  "ENRICHING",
+  "ENRICH_FAILED",
+  "ENRICHED",
 ] as const;
 
 export const ResultsViewSchema = z.object({

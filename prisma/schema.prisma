@@ -20,7 +20,7 @@ enum SearchJobStatus {
   DISCOVERING
   CRAWLING
   EXTRACTING
-  SCORING
+  ENRICHING
   COMPLETED
   FAILED
   CANCELLED
@@ -34,9 +34,9 @@ enum SearchResultStage {
   EXTRACTING
   EXTRACT_FAILED
   EXTRACTED
-  SCORING
-  SCORE_FAILED
-  SCORED
+  ENRICHING
+  ENRICH_FAILED
+  ENRICHED
 }
 
 // ---------------------------------------------------------------------------
@@ -104,8 +104,7 @@ model SearchJob {
   createdAt    DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
 
-  results   SearchResult[]
-  leadScores LeadScore[]
+  results SearchResult[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt])
@@ -130,39 +129,12 @@ model SearchResult {
   createdAt       DateTime          @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime          @updatedAt @db.Timestamptz(3)
 
-  searchJob SearchJob   @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
-  company   Company     @relation(fields: [companyId], references: [id])
-  leadScore LeadScore?
+  searchJob SearchJob @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
+  company   Company   @relation(fields: [companyId], references: [id])
 
   @@unique([searchJobId, companyId])
   @@index([searchJobId, stage])
   @@index([searchJobId, rank])
   @@index([companyId])
   @@map("search_results")
-}
-
-// ---------------------------------------------------------------------------
-// LeadScore — search-contextual score for a single search result
-// ---------------------------------------------------------------------------
-
-model LeadScore {
-  id             String   @id @default(uuid()) @db.Uuid
-  searchResultId String   @unique @db.Uuid
-  searchJobId    String   @db.Uuid
-  totalScore     Decimal  @db.Decimal(5, 2)
-  confidence     Decimal  @db.Decimal(4, 3)
-  breakdown      Json     @default("{}")
-  rationale      String   @db.Text
-  modelUsed      String?  @db.VarChar(100)
-  promptVersion  String?  @db.VarChar(50)
-  scoredAt       DateTime @default(now()) @db.Timestamptz(3)
-  createdAt      DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
-
-  searchResult SearchResult @relation(fields: [searchResultId], references: [id], onDelete: Cascade)
-  searchJob    SearchJob    @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
-
-  @@index([searchJobId, totalScore(sort: Desc)])
-  @@index([searchJobId, confidence(sort: Desc)])
-  @@map("lead_scores")
 }

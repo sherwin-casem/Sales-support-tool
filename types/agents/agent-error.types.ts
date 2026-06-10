@@ -49,22 +49,6 @@ export class CompanyExtractionError extends Error {
   }
 }
 
-export class LeadScoringError extends Error {
-  readonly code: AgentErrorCode;
-  readonly cause?: unknown;
-
-  constructor(code: AgentErrorCode, message: string, cause?: unknown) {
-    super(message);
-    this.name = "LeadScoringError";
-    this.code = code;
-    this.cause = cause;
-  }
-
-  static fromAgentError(error: AgentError): LeadScoringError {
-    return new LeadScoringError(error.code, error.message, error.cause);
-  }
-}
-
 export class LeadEnrichmentError extends Error {
   readonly code: AgentErrorCode;
   readonly cause?: unknown;

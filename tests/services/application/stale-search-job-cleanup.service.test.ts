@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { StaleSearchJobCleanupService } from "@/services/application/stale-search-job-cleanup.service.js";
-import { STALE_SEARCH_JOB_ERROR_MESSAGE } from "@/lib/search/search-job-lifecycle.js";
+import {
+  STALE_SEARCH_JOB_ERROR_MESSAGE,
+  StaleSearchJobCleanupService,
+} from "@/services/application/stale-search-job-cleanup.service.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
 
 describe("StaleSearchJobCleanupService", () => {

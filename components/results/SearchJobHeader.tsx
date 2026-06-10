@@ -12,7 +12,7 @@ const statusStyles: Record<GetSearchResponse["status"], string> = {
   DISCOVERING: "bg-blue-50 text-blue-700",
   CRAWLING: "bg-blue-50 text-blue-700",
   EXTRACTING: "bg-blue-50 text-blue-700",
-  SCORING: "bg-blue-50 text-blue-700",
+  ENRICHING: "bg-blue-50 text-blue-700",
   COMPLETED: "bg-emerald-50 text-emerald-700",
   FAILED: "bg-rose-50 text-rose-700",
   CANCELLED: "bg-slate-100 text-slate-600",

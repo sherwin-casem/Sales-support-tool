@@ -46,10 +46,6 @@ function buildSearchQueryString(
 ): string {
   const params = new URLSearchParams();
 
-  if (query.minScore !== undefined) {
-    params.set("minScore", String(query.minScore));
-  }
-
   if (query.stage) {
     params.set("stage", query.stage);
   }

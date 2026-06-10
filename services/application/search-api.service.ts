@@ -72,7 +72,6 @@ export class SearchApiService {
 
     const [rankedResults, rawResults] = await Promise.all([
       this.deps.leadRepository.findResultsWithDetailsForJob(searchJobId, {
-        minScore: query.minScore,
         stage: query.stage,
       }),
       this.deps.searchRepository.findResultsByJobId(searchJobId),

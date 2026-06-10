@@ -57,28 +57,10 @@ async function main() {
     data: {
       searchJobId: searchJob.id,
       companyId: company.id,
-      stage: SearchResultStage.SCORED,
+      stage: SearchResultStage.ENRICHED,
       rank: 1,
       discoverySource: "seed",
       completedAt: new Date(),
-    },
-  });
-
-  await prisma.leadScore.create({
-    data: {
-      searchResultId: searchResult.id,
-      searchJobId: searchJob.id,
-      totalScore: 87.5,
-      confidence: 0.91,
-      breakdown: {
-        industryFit: 90,
-        keywordFit: 85,
-        sizeFit: 88,
-        semanticFit: 87,
-      },
-      rationale: "Strong fintech SaaS signals aligned with search criteria.",
-      modelUsed: "seed",
-      promptVersion: "seed-v1",
     },
   });
 }

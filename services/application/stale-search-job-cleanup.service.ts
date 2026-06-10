@@ -1,8 +1,10 @@
 import { getSearchJobConfig } from "@/lib/config/search-job.config.js";
 import { apiLogger } from "@/lib/logging/logger.js";
-import { STALE_SEARCH_JOB_ERROR_MESSAGE } from "@/lib/search/search-job-lifecycle.js";
 import { getSearchRepository } from "@/repositories/prisma/search.repository.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
+
+export const STALE_SEARCH_JOB_ERROR_MESSAGE =
+  "Search timed out or was interrupted. Start a new search.";
 
 export interface StaleSearchJobCleanupResult {
   failedJobIds: string[];

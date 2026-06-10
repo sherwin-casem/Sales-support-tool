@@ -225,7 +225,7 @@ export class SearchOrchestrator {
 
       mergeStageOutcomes(summary, failures, extractionOutcomes);
 
-      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.SCORING);
+      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.ENRICHING);
 
       const extractedResults = await this.deps.searchRepository.findResultsByJobId(searchJobId, {
         stage: SearchResultStage.EXTRACTED,
@@ -504,7 +504,7 @@ export class SearchOrchestrator {
   ): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId: searchResult.id,
-      stage: SearchResultStage.SCORING,
+      stage: SearchResultStage.ENRICHING,
     });
 
     const company = await this.deps.companyRepository.findById(searchResult.companyId);
@@ -567,7 +567,7 @@ export class SearchOrchestrator {
 
     await this.deps.searchRepository.updateResultStage({
       searchResultId: searchResult.id,
-      stage: SearchResultStage.SCORED,
+      stage: SearchResultStage.ENRICHED,
       completedAt: new Date(),
     });
 
@@ -648,11 +648,11 @@ export class SearchOrchestrator {
   ): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId,
-      stage: SearchResultStage.SCORE_FAILED,
+      stage: SearchResultStage.ENRICH_FAILED,
       stageError: message,
     });
 
-    return createStageFailure(SearchResultStage.SCORE_FAILED, {
+    return createStageFailure(SearchResultStage.ENRICH_FAILED, {
       searchResultId,
       companyId,
       message,
