@@ -44,7 +44,8 @@ export const CompanyDiscoveryInputSchema = z.object({
     },
     z.string().max(200).optional(),
   ),
-  limit: z.number().int().min(1).max(100).optional().default(25),
+  limit: z.number().int().min(1).max(100).optional(),
+  excludedWebsites: z.array(z.string().url().max(2048)).max(500).optional(),
 });
 
 export const DiscoveredCompanySchema = z.object({

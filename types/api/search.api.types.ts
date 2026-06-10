@@ -4,14 +4,14 @@ import type { ExtractedCompany } from "@/types/agents/company-extraction.types.j
 
 export interface CreateSearchRequest {
   query: string;
-  companyLimit?: number;
+  companyLimit?: number | null;
 }
 
 export interface CreateSearchResponse {
   id: string;
   status: SearchJobStatus;
   query: string;
-  companyLimit: number;
+  companyLimit: number | null;
   createdAt: string;
   links: {
     self: string;
@@ -57,7 +57,7 @@ export interface GetSearchResponse {
   id: string;
   query: string;
   status: SearchJobStatus;
-  companyLimit: number;
+  companyLimit: number | null;
   criteria: ParsedQuery | null;
   summary: SearchSummaryResponse;
   errorMessage: string | null;

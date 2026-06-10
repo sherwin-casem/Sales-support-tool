@@ -32,7 +32,7 @@ describe("PrismaSearchRepository", () => {
         userId: job.userId,
         query: job.query,
         criteria: job.criteria,
-        companyLimit: 25,
+        companyLimit: null,
         status: "PENDING",
       },
     });

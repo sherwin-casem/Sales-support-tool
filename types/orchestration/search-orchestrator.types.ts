@@ -4,7 +4,7 @@ import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 export interface RunSearchInput {
   userId: string;
   query: string;
-  companyLimit?: number;
+  companyLimit?: number | null;
   searchJobId?: string;
 }
 

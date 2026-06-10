@@ -18,6 +18,29 @@ describe("SearchFormSchema", () => {
     }
   });
 
+  it("defaults company limit to none when omitted", () => {
+    const parsed = SearchFormSchema.safeParse({
+      query: "logistics companies in Finland",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.companyLimit).toBeNull();
+    }
+  });
+
+  it("treats an empty company limit as none", () => {
+    const parsed = SearchFormSchema.safeParse({
+      query: "logistics companies in Finland",
+      companyLimit: "",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.companyLimit).toBeNull();
+    }
+  });
+
   it("trims whitespace from the query", () => {
     const parsed = SearchFormSchema.safeParse({
       query: "  SaaS startups  ",

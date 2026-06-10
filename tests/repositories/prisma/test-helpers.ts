@@ -99,7 +99,7 @@ export function createMockSearchJob(
     query: string;
     status: SearchJobStatus;
     criteria: Record<string, unknown>;
-    companyLimit: number;
+    companyLimit: number | null;
     errorMessage: string | null;
     startedAt: Date | null;
     completedAt: Date | null;
@@ -119,7 +119,7 @@ export function createMockSearchJob(
       employeeRange: "50-200",
     },
     status: overrides.status ?? "PENDING",
-    companyLimit: overrides.companyLimit ?? 25,
+    companyLimit: overrides.companyLimit ?? null,
     errorMessage: overrides.errorMessage ?? null,
     startedAt: overrides.startedAt ?? null,
     completedAt: overrides.completedAt ?? null,

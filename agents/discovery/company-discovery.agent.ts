@@ -11,6 +11,7 @@ import {
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import { companyDeduplicatorService } from "@/services/domain/company/company-deduplicator.service.js";
 import { DiscoveryError } from "@/types/agents/discovery-error.types.js";
+import { isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
 import {
   COMPANY_DISCOVERY_PROMPT_VERSION,
   type CompanyDiscoveryInput,
@@ -77,7 +78,10 @@ export class CompanyDiscoveryAgent
         continue;
       }
 
-      const validated = this.validateOutput(completionResult.value, parsedInput.data.limit);
+      const validated = this.validateOutput(
+        completionResult.value,
+        parsedInput.data.limit,
+      );
 
       if (validated.ok) {
         aiLogger.info("CompanyDiscoveryAgent.execute completed", {
@@ -114,7 +118,8 @@ export class CompanyDiscoveryAgent
         this.promptLoader.load(SYSTEM_PROMPT_PATH),
         this.promptLoader.loadTemplate(USER_PROMPT_PATH, {
           query: wrapUntrustedContent("user_query", input.query),
-          limit: String(input.limit),
+          limitInstruction: buildLimitInstruction(input.limit),
+          excludedCompaniesSection: buildExcludedCompaniesSection(input.excludedWebsites),
           industryHint: input.industry ?? "not specified",
           locationHint: input.location ?? "not specified",
         }),
@@ -147,7 +152,7 @@ export class CompanyDiscoveryAgent
 
   private validateOutput(
     content: string,
-    limit: number,
+    limit?: number,
   ): Result<DiscoveredCompany[], DiscoveryError> {
     let parsed: unknown;
 
@@ -191,12 +196,16 @@ export class CompanyDiscoveryAgent
       });
     }
 
-    return ok(
-      deduplicated.slice(0, limit).map((candidate) => ({
-        companyName: candidate.companyName,
-        website: candidate.website,
-      })),
-    );
+    const companies = deduplicated.map((candidate) => ({
+      companyName: candidate.companyName,
+      website: candidate.website,
+    }));
+
+    if (isUnlimitedCompanyLimit(limit)) {
+      return ok(companies);
+    }
+
+    return ok(companies.slice(0, limit));
   }
 }
 
@@ -204,5 +213,37 @@ type CompanyDiscoveryInputValidated = {
   query: string;
   industry?: string;
   location?: string;
-  limit: number;
+  limit?: number;
+  excludedWebsites?: string[];
 };
+
+function buildLimitInstruction(limit?: number): string {
+  if (isUnlimitedCompanyLimit(limit)) {
+    return (
+      "There is no limit on the number of companies. " +
+      "Return every distinct company that matches the query."
+    );
+  }
+
+  return `Return up to ${limit} companies.`;
+}
+
+function buildExcludedCompaniesSection(excludedWebsites: string[] | undefined): string {
+  if (!excludedWebsites?.length) {
+    return "";
+  }
+
+  const domains = excludedWebsites
+    .map((website) => website.trim())
+    .filter(Boolean)
+    .slice(0, 200);
+
+  if (domains.length === 0) {
+    return "";
+  }
+
+  return [
+    "Already discovered companies (do not return these again):",
+    ...domains.map((website) => `- ${website}`),
+  ].join("\n");
+}

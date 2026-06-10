@@ -97,7 +97,7 @@ model SearchJob {
   query        String          @db.Text
   criteria     Json            @default("{}")
   status       SearchJobStatus @default(PENDING)
-  companyLimit Int             @default(25)
+  companyLimit Int?
   errorMessage String?         @db.Text
   startedAt    DateTime?       @db.Timestamptz(3)
   completedAt  DateTime?       @db.Timestamptz(3)

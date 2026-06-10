@@ -1,6 +1,7 @@
 import { SearchJobStatus, SearchResultStage } from "@prisma/client";
 import { getCrawlerConfig } from "@/lib/config/crawler.config.js";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
+import { isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
 import { computeExtractionCompleteness } from "@/lib/validations/company-extraction.schema.js";
 import { logger } from "@/lib/logging/logger.js";
 import { runWithConcurrency } from "@/lib/utils/concurrency.js";
@@ -8,7 +9,10 @@ import { withRetry } from "@/lib/utils/retry.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
-import type { DiscoveredCompany } from "@/types/agents/company-discovery.types.js";
+import type {
+  CompanyDiscoveryInput,
+  DiscoveredCompany,
+} from "@/types/agents/company-discovery.types.js";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { LlmReadyContent } from "@/types/content/text-cleaning.types.js";
@@ -102,7 +106,7 @@ export class SearchOrchestrator {
     logger.info("SearchOrchestrator.run started", {
       userId: input.userId,
       queryLength: input.query.length,
-      companyLimit: input.companyLimit ?? 25,
+      companyLimit: isUnlimitedCompanyLimit(input.companyLimit) ? "none" : input.companyLimit,
     });
 
     let searchJobId = "";
@@ -333,17 +337,22 @@ export class SearchOrchestrator {
   private async discoverCompaniesWithRetry(
     query: string,
     criteria: ParsedQuery,
-    limit: number,
+    limit: number | null,
   ): Promise<Result<DiscoveredCompany[], SearchOrchestratorError>> {
     try {
       const result = await withRetry(
         async () => {
-          const discovered = await this.deps.companyDiscovery.discover({
+          const discoveryInput: CompanyDiscoveryInput = {
             query,
             industry: criteria.industry !== "unknown" ? criteria.industry : undefined,
             location: criteria.location !== "unknown" ? criteria.location : undefined,
-            limit,
-          });
+          };
+
+          if (typeof limit === "number") {
+            discoveryInput.limit = limit;
+          }
+
+          const discovered = await this.deps.companyDiscovery.discover(discoveryInput);
 
           if (!discovered.ok) {
             throw discovered.error;
@@ -733,7 +742,7 @@ function buildNoCompaniesDiscoveredMessage(query: string, criteria: ParsedQuery)
 
   return (
     `No companies discovered for query "${query}"${hints}. ` +
-    "Try a more specific description, a different location, or reduce the company limit and retry."
+    "Try a more specific description or a different location and retry."
   );
 }
 

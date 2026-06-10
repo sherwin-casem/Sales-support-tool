@@ -3,7 +3,7 @@ import { ParsedQuerySchema } from "@/lib/validations/query-parser.schema.js";
 
 export const CreateSearchRequestSchema = z.object({
   query: z.string().trim().min(1, "query must not be empty").max(500),
-  companyLimit: z.number().int().min(1).max(100).optional(),
+  companyLimit: z.number().int().min(1).max(100).nullish(),
 });
 
 export const SearchIdParamsSchema = z.object({

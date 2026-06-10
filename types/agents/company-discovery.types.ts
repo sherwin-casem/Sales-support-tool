@@ -4,7 +4,10 @@ export interface CompanyDiscoveryInput {
   query: string;
   industry?: string;
   location?: string;
+  /** When omitted, discovery runs without a cap and aims for all matches. */
   limit?: number;
+  /** Domains or URLs already found — used to request additional matches in later rounds. */
+  excludedWebsites?: string[];
 }
 
 export interface DiscoveredCompany {

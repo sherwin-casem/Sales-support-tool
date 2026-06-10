@@ -41,7 +41,7 @@ export class PrismaSearchRepository implements SearchRepository {
         userId: input.userId,
         query: input.query,
         criteria: (input.criteria ?? {}) as unknown as Prisma.InputJsonValue,
-        companyLimit: input.companyLimit ?? 25,
+        companyLimit: input.companyLimit ?? null,
         status: SearchJobStatus.PENDING,
       },
     });
