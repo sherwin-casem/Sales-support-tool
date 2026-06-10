@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { CRAWL_PATHS } from "@/types/crawler/crawler.types.js";
+import { ALL_CRAWL_PATHS } from "@/types/crawler/crawler.types.js";
 
-export const CrawlPathSchema = z.enum(CRAWL_PATHS);
+export const CrawlPathSchema = z.enum(ALL_CRAWL_PATHS);
 
 export const CrawlCompanyInputSchema = z.object({
   companyId: z.string().uuid("companyId must be a valid UUID"),
@@ -11,6 +11,7 @@ export const CrawlCompanyInputSchema = z.object({
     .min(1)
     .max(253)
     .transform((value) => value.toLowerCase().replace(/^www\./, "")),
+  paths: z.array(CrawlPathSchema).min(1).optional(),
 });
 
 export const CrawledPageSchema = z.object({

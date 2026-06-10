@@ -1,11 +1,20 @@
 export const CRAWL_PATHS = ["/", "/about", "/company", "/contact", "/careers"] as const;
 
-export type CrawlPath = (typeof CRAWL_PATHS)[number];
+/** Targeted paths for hybrid outreach gap-filling (contact / team pages). */
+export const CONTACT_CRAWL_PATHS = ["/contact", "/about", "/team"] as const;
+
+export const ALL_CRAWL_PATHS = [
+  ...CRAWL_PATHS,
+  ...CONTACT_CRAWL_PATHS.filter((path) => !(CRAWL_PATHS as readonly string[]).includes(path)),
+] as const;
+
+export type CrawlPath = (typeof ALL_CRAWL_PATHS)[number];
 
 export interface CrawlCompanyInput {
   companyId: string;
   website: string;
   normalizedDomain: string;
+  paths?: readonly CrawlPath[];
 }
 
 export interface CrawledPage {

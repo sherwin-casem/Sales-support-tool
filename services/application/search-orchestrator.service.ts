@@ -16,7 +16,11 @@ import type {
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { LlmReadyContent } from "@/types/content/text-cleaning.types.js";
+import { CONTACT_CRAWL_PATHS } from "@/types/crawler/crawler.types.js";
 import type { CrawlCompanyResult } from "@/types/crawler/crawler.types.js";
+import { createDiscoveryStubProfile } from "@/services/domain/enrichment/discovery-stub-profile.service.js";
+import { hasOutreachContactGaps } from "@/services/domain/enrichment/outreach-gaps.service.js";
+import { mergeExtractedProfiles } from "@/services/domain/enrichment/profile-merge.service.js";
 import type { SearchResultRecord } from "@/types/repositories/search.repository.types.js";
 import type { CompanyDiscoveryPort } from "@/services/infrastructure/discovery/company-discovery.service.js";
 import type { CompanyExtractionPort } from "@/services/infrastructure/ai/company-extraction.service.js";
@@ -191,60 +195,20 @@ export class SearchOrchestrator {
         return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
       }
 
-      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.CRAWLING);
+      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.ENRICHING);
 
       const searchResults = await this.deps.searchRepository.findResultsByJobId(searchJobId);
 
-      logger.info("SearchOrchestrator crawl stage started", {
+      logger.info("SearchOrchestrator hybrid enrichment stage started", {
         searchJobId,
         companyCount: searchResults.length,
-        crawlConcurrency: this.crawlConcurrency,
-      });
-
-      const crawlOutcomes = await runWithConcurrency(
-        searchResults,
-        this.crawlConcurrency,
-        (searchResult) => this.processCrawl(searchResult),
-      );
-
-      mergeStageOutcomes(summary, failures, crawlOutcomes);
-
-      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.EXTRACTING);
-
-      const crawledResults = await this.deps.searchRepository.findResultsByJobId(searchJobId, {
-        stage: SearchResultStage.CRAWLED,
-      });
-
-      logger.info("SearchOrchestrator extraction stage started", {
-        searchJobId,
-        companyCount: crawledResults.length,
-        extractionConcurrency: this.extractionConcurrency,
-      });
-
-      const extractionOutcomes = await runWithConcurrency(
-        crawledResults,
-        this.extractionConcurrency,
-        (searchResult) => this.processExtraction(searchResult),
-      );
-
-      mergeStageOutcomes(summary, failures, extractionOutcomes);
-
-      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.ENRICHING);
-
-      const extractedResults = await this.deps.searchRepository.findResultsByJobId(searchJobId, {
-        stage: SearchResultStage.EXTRACTED,
-      });
-
-      logger.info("SearchOrchestrator enrichment stage started", {
-        searchJobId,
-        companyCount: extractedResults.length,
         enrichmentConcurrency: this.enrichmentConcurrency,
       });
 
       const enrichmentOutcomes = await runWithConcurrency(
-        extractedResults,
+        searchResults,
         this.enrichmentConcurrency,
-        (searchResult) => this.processEnrichment(searchResult),
+        (searchResult) => this.processLeadHybrid(searchResult),
       );
 
       mergeStageOutcomes(summary, failures, enrichmentOutcomes);
@@ -378,139 +342,7 @@ export class SearchOrchestrator {
     }
   }
 
-  private async processCrawl(searchResult: SearchResultRecord): Promise<StageOutcome> {
-    await this.deps.searchRepository.updateResultStage({
-      searchResultId: searchResult.id,
-      stage: SearchResultStage.CRAWLING,
-    });
-
-    const company = await this.deps.companyRepository.findById(searchResult.companyId);
-
-    if (!company?.websiteUrl) {
-      await this.deps.searchRepository.updateResultStage({
-        searchResultId: searchResult.id,
-        stage: SearchResultStage.CRAWL_FAILED,
-        stageError: "Company website is missing",
-      });
-
-      return createStageFailure(SearchResultStage.CRAWL_FAILED, {
-        searchResultId: searchResult.id,
-        companyId: searchResult.companyId,
-        message: "Company website is missing",
-      }, { crawled: 0 });
-    }
-
-    const crawlResult = await this.runWithResultRetry(
-      () =>
-        this.deps.websiteCrawler.crawl({
-          companyId: company.id,
-          website: company.websiteUrl!,
-          normalizedDomain: company.normalizedDomain,
-        }),
-      (error) => error.code === "CRAWL_FAILED" || error.code === "BROWSER_ERROR",
-    );
-
-    if (!crawlResult.ok) {
-      await this.deps.searchRepository.updateResultStage({
-        searchResultId: searchResult.id,
-        stage: SearchResultStage.CRAWL_FAILED,
-        stageError: crawlResult.error.message,
-      });
-
-      return createStageFailure(SearchResultStage.CRAWL_FAILED, {
-        searchResultId: searchResult.id,
-        companyId: company.id,
-        message: crawlResult.error.message,
-      }, { crawled: 0 });
-    }
-
-    await this.deps.companyRepository.markCrawled(company.id);
-    this.storeCrawlPayload(searchResult.id, crawlResult.value);
-
-    await this.deps.searchRepository.updateResultStage({
-      searchResultId: searchResult.id,
-      stage: SearchResultStage.CRAWLED,
-    });
-
-    return { crawled: 1, extracted: 0, enriched: 0, failed: 0, failures: [] };
-  }
-
-  private async processExtraction(searchResult: SearchResultRecord): Promise<StageOutcome> {
-    await this.deps.searchRepository.updateResultStage({
-      searchResultId: searchResult.id,
-      stage: SearchResultStage.EXTRACTING,
-    });
-
-    const company = await this.deps.companyRepository.findById(searchResult.companyId);
-
-    if (!company) {
-      return this.markExtractFailed(searchResult.id, searchResult.companyId, "Company not found");
-    }
-
-    const crawlPayload = this.getCrawlPayload(searchResult.id);
-
-    if (!crawlPayload) {
-      return this.markExtractFailed(
-        searchResult.id,
-        company.id,
-        "Crawl payload not found for search result",
-      );
-    }
-
-    const llmContent = this.buildLlmContent(crawlPayload);
-
-    if (llmContent.length < 100) {
-      return this.markExtractFailed(
-        searchResult.id,
-        company.id,
-        "Insufficient cleaned content for extraction",
-      );
-    }
-
-    const extractionResult = await this.runWithResultRetry(
-      () =>
-        this.deps.companyExtraction.extract({
-          content: llmContent,
-          domain: company.normalizedDomain,
-          companyId: company.id,
-        }),
-      (error) =>
-        error.code === "OPENAI_ERROR" ||
-        error.code === "VALIDATION_ERROR" ||
-        error.code === "EMPTY_RESPONSE",
-    );
-
-    if (!extractionResult.ok) {
-      return this.markExtractFailed(
-        searchResult.id,
-        company.id,
-        extractionResult.error.message,
-      );
-    }
-
-    await this.deps.companyRepository.saveProfile({
-      companyId: company.id,
-      structuredData: extractionResult.value.profile,
-      completeness: extractionResult.value.meta.completeness,
-      modelUsed: extractionResult.value.meta.modelUsed,
-      promptVersion: extractionResult.value.meta.promptVersion,
-      contentHash: extractionResult.value.meta.contentHash,
-      extractedAt: new Date(extractionResult.value.meta.extractedAt),
-    });
-
-    this.storeExtractedProfile(searchResult.id, extractionResult.value.profile);
-
-    await this.deps.searchRepository.updateResultStage({
-      searchResultId: searchResult.id,
-      stage: SearchResultStage.EXTRACTED,
-    });
-
-    return { crawled: 0, extracted: 1, enriched: 0, failed: 0, failures: [] };
-  }
-
-  private async processEnrichment(
-    searchResult: SearchResultRecord,
-  ): Promise<StageOutcome> {
+  private async processLeadHybrid(searchResult: SearchResultRecord): Promise<StageOutcome> {
     await this.deps.searchRepository.updateResultStage({
       searchResultId: searchResult.id,
       stage: SearchResultStage.ENRICHING,
@@ -526,23 +358,15 @@ export class SearchOrchestrator {
       );
     }
 
-    const websiteProfile = this.getExtractedProfile(searchResult.id);
-
-    if (!websiteProfile) {
-      return this.markEnrichFailed(
-        searchResult.id,
-        searchResult.companyId,
-        "Extracted profile not found for enrichment",
-      );
-    }
+    const stubProfile = createDiscoveryStubProfile(company.name ?? company.domain);
 
     const enrichmentResult = await this.runWithResultRetry(
       () =>
         this.deps.leadEnrichment.enrich({
-          companyName: websiteProfile.companyName,
+          companyName: stubProfile.companyName,
           domain: company.normalizedDomain,
           website: company.websiteUrl!,
-          websiteProfile,
+          websiteProfile: stubProfile,
           companyId: company.id,
         }),
       (error) =>
@@ -559,20 +383,38 @@ export class SearchOrchestrator {
       );
     }
 
-    const enrichedProfile = enrichmentResult.value.profile;
-    const contentHash = hashEnrichmentProfile(enrichedProfile);
+    let profile = enrichmentResult.value.profile;
+    let crawled = 0;
+    let extracted = 0;
+
+    if (hasOutreachContactGaps(profile)) {
+      const contactOutcome = await this.supplementProfileFromContactPages(
+        searchResult.id,
+        company.id,
+        company.websiteUrl!,
+        company.normalizedDomain,
+        profile,
+      );
+
+      if (contactOutcome.profile) {
+        profile = contactOutcome.profile;
+      }
+
+      crawled = contactOutcome.crawled;
+      extracted = contactOutcome.extracted;
+    }
+
+    const contentHash = hashEnrichmentProfile(profile);
 
     await this.deps.companyRepository.saveProfile({
       companyId: company.id,
-      structuredData: enrichedProfile,
-      completeness: computeExtractionCompleteness(enrichedProfile),
+      structuredData: profile,
+      completeness: computeExtractionCompleteness(profile),
       modelUsed: enrichmentResult.value.meta.modelUsed,
       promptVersion: enrichmentResult.value.meta.promptVersion,
       contentHash,
       extractedAt: new Date(enrichmentResult.value.meta.enrichedAt),
     });
-
-    this.storeExtractedProfile(searchResult.id, enrichedProfile);
 
     await this.deps.searchRepository.updateResultStage({
       searchResultId: searchResult.id,
@@ -580,7 +422,77 @@ export class SearchOrchestrator {
       completedAt: new Date(),
     });
 
-    return { crawled: 0, extracted: 0, enriched: 1, failed: 0, failures: [] };
+    return { crawled, extracted, enriched: 1, failed: 0, failures: [] };
+  }
+
+  private async supplementProfileFromContactPages(
+    searchResultId: string,
+    companyId: string,
+    website: string,
+    normalizedDomain: string,
+    webProfile: ExtractedCompany,
+  ): Promise<{ profile?: ExtractedCompany; crawled: number; extracted: number }> {
+    await this.deps.searchRepository.updateResultStage({
+      searchResultId,
+      stage: SearchResultStage.CRAWLING,
+    });
+
+    const crawlResult = await this.runWithResultRetry(
+      () =>
+        this.deps.websiteCrawler.crawl({
+          companyId,
+          website,
+          normalizedDomain,
+          paths: CONTACT_CRAWL_PATHS,
+        }),
+      (error) => error.code === "CRAWL_FAILED" || error.code === "BROWSER_ERROR",
+    );
+
+    if (!crawlResult.ok) {
+      logger.info("SearchOrchestrator contact crawl skipped after failure", {
+        searchResultId,
+        companyId,
+        message: crawlResult.error.message,
+      });
+
+      return { crawled: 0, extracted: 0 };
+    }
+
+    await this.deps.companyRepository.markCrawled(companyId);
+
+    const llmContent = this.buildLlmContent(crawlResult.value);
+
+    if (llmContent.length < 100) {
+      return { crawled: 1, extracted: 0 };
+    }
+
+    await this.deps.searchRepository.updateResultStage({
+      searchResultId,
+      stage: SearchResultStage.EXTRACTING,
+    });
+
+    const extractionResult = await this.runWithResultRetry(
+      () =>
+        this.deps.companyExtraction.extract({
+          content: llmContent,
+          domain: normalizedDomain,
+          companyId,
+        }),
+      (error) =>
+        error.code === "OPENAI_ERROR" ||
+        error.code === "VALIDATION_ERROR" ||
+        error.code === "EMPTY_RESPONSE",
+    );
+
+    if (!extractionResult.ok) {
+      return { crawled: 1, extracted: 0 };
+    }
+
+    return {
+      profile: mergeExtractedProfiles(extractionResult.value.profile, webProfile),
+      crawled: 1,
+      extracted: 1,
+    };
   }
 
   private buildLlmContent(crawlResult: CrawlCompanyResult): string {
@@ -632,24 +544,6 @@ export class SearchOrchestrator {
     return lastResult!;
   }
 
-  private async markExtractFailed(
-    searchResultId: string,
-    companyId: string,
-    message: string,
-  ): Promise<StageOutcome> {
-    await this.deps.searchRepository.updateResultStage({
-      searchResultId,
-      stage: SearchResultStage.EXTRACT_FAILED,
-      stageError: message,
-    });
-
-    return createStageFailure(SearchResultStage.EXTRACT_FAILED, {
-      searchResultId,
-      companyId,
-      message,
-    }, { extracted: 0 });
-  }
-
   private async markEnrichFailed(
     searchResultId: string,
     companyId: string,
@@ -675,24 +569,6 @@ export class SearchOrchestrator {
     });
   }
 
-  private readonly crawlPayloadByResultId = new Map<string, CrawlCompanyResult>();
-  private readonly extractedProfileByResultId = new Map<string, ExtractedCompany>();
-
-  private storeCrawlPayload(searchResultId: string, payload: CrawlCompanyResult): void {
-    this.crawlPayloadByResultId.set(searchResultId, payload);
-  }
-
-  private getCrawlPayload(searchResultId: string): CrawlCompanyResult | undefined {
-    return this.crawlPayloadByResultId.get(searchResultId);
-  }
-
-  private storeExtractedProfile(searchResultId: string, profile: ExtractedCompany): void {
-    this.extractedProfileByResultId.set(searchResultId, profile);
-  }
-
-  private getExtractedProfile(searchResultId: string): ExtractedCompany | undefined {
-    return this.extractedProfileByResultId.get(searchResultId);
-  }
 }
 
 function createStageFailure(

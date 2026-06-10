@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CrawlPathResolverService } from "@/services/domain/crawler/crawl-path-resolver.service.js";
-import { CRAWL_PATHS } from "@/types/crawler/crawler.types.js";
+import { CONTACT_CRAWL_PATHS, CRAWL_PATHS } from "@/types/crawler/crawler.types.js";
 import { CrawlError } from "@/types/crawler/crawler-error.types.js";
 
 describe("CrawlPathResolverService", () => {
@@ -13,6 +13,14 @@ describe("CrawlPathResolverService", () => {
     expect(targets[0]?.url).toBe("https://acme.fi/");
     expect(targets[1]?.url).toBe("https://acme.fi/about");
     expect(targets[4]?.url).toBe("https://acme.fi/careers");
+  });
+
+  it("resolves contact crawl paths for hybrid outreach gap-filling", () => {
+    const targets = resolver.resolve("https://acme.fi", "acme.fi", CONTACT_CRAWL_PATHS);
+
+    expect(targets.map((target) => target.path)).toEqual([...CONTACT_CRAWL_PATHS]);
+    expect(targets[0]?.url).toBe("https://acme.fi/contact");
+    expect(targets[2]?.url).toBe("https://acme.fi/team");
   });
 
   it("blocks mismatched domain hosts", () => {
