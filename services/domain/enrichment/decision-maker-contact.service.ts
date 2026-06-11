@@ -1,7 +1,9 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 import {
+  isGenericEmailLocalPart,
   normalizePhoneDigits,
   validateEmail,
+  validatePersonalEmail,
   validatePhone,
 } from "@/lib/validations/lead-contact.validation.js";
 
@@ -9,27 +11,6 @@ export interface DecisionMakerContactHints {
   email: string | null;
   linkedInUrl: string | null;
 }
-
-const GENERIC_EMAIL_LOCAL_PARTS = new Set([
-  "info",
-  "sales",
-  "contact",
-  "hello",
-  "support",
-  "admin",
-  "office",
-  "team",
-  "marketing",
-  "hr",
-  "careers",
-  "press",
-  "media",
-  "billing",
-  "service",
-  "customerservice",
-  "enquiries",
-  "inquiries",
-]);
 
 const PROXIMITY_WINDOW_CHARS = 300;
 
@@ -42,8 +23,7 @@ function isUnknown(value: string): boolean {
 }
 
 function isGenericEmail(email: string): boolean {
-  const localPart = email.split("@")[0]?.trim().toLowerCase() ?? "";
-  return GENERIC_EMAIL_LOCAL_PARTS.has(localPart);
+  return isGenericEmailLocalPart(email);
 }
 
 function isPersonalLinkedInUrl(url: string): boolean {
@@ -117,15 +97,7 @@ function sanitizeDecisionMakerSemanticRules(
   let decisionMakerLinkedInUrl = profile.decisionMakerLinkedInUrl;
 
   if (decisionMakerEmail) {
-    const normalizedEmail = decisionMakerEmail.trim().toLowerCase();
-    const companyEmail = profile.email?.trim().toLowerCase() ?? null;
-
-    if (
-      isGenericEmail(normalizedEmail) ||
-      (companyEmail && normalizedEmail === companyEmail)
-    ) {
-      decisionMakerEmail = null;
-    }
+    decisionMakerEmail = validatePersonalEmail(decisionMakerEmail, profile.email);
   }
 
   if (decisionMakerLinkedInUrl) {

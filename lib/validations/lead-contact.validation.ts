@@ -3,10 +3,40 @@ import { z } from "zod";
 const PLACEHOLDER_EMAIL_DOMAINS = new Set([
   "example.com",
   "example.org",
+  "example.net",
   "test.com",
   "domain.com",
   "email.com",
+  "sample.com",
   "localhost",
+  "invalid.com",
+  "test.test",
+]);
+
+const GENERIC_EMAIL_LOCAL_PARTS = new Set([
+  "info",
+  "sales",
+  "contact",
+  "hello",
+  "support",
+  "admin",
+  "office",
+  "team",
+  "marketing",
+  "hr",
+  "careers",
+  "press",
+  "media",
+  "billing",
+  "service",
+  "customerservice",
+  "enquiries",
+  "inquiries",
+  "noreply",
+  "no-reply",
+  "donotreply",
+  "postmaster",
+  "webmaster",
 ]);
 
 const PHONE_ALLOWED_CHARS = /^[+()\d\s.-]+$/;
@@ -282,6 +312,11 @@ export function normalizePhoneHref(phone: string): string {
   return normalizePhoneDigits(phone);
 }
 
+export function isGenericEmailLocalPart(email: string): boolean {
+  const localPart = email.split("@")[0]?.trim().toLowerCase() ?? "";
+  return GENERIC_EMAIL_LOCAL_PARTS.has(localPart);
+}
+
 export function validateEmail(value: string | null | undefined): string | null {
   if (value == null) {
     return null;
@@ -296,12 +331,18 @@ export function validateEmail(value: string | null | undefined): string | null {
   const atCount = (trimmed.match(/@/g) ?? []).length;
 
   if (atCount !== 1) {
+    // #region agent log
+    fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'lead-contact.validation.ts:validateEmail',message:'email rejected',data:{reason:'at_count',accepted:false},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     return null;
   }
 
   const [localPart, domainPart] = trimmed.split("@");
 
   if (!localPart?.trim() || !domainPart?.trim()) {
+    // #region agent log
+    fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'lead-contact.validation.ts:validateEmail',message:'email rejected',data:{reason:'empty_part',accepted:false},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     return null;
   }
 
@@ -309,16 +350,52 @@ export function validateEmail(value: string | null | undefined): string | null {
   const parsed = z.string().email().safeParse(normalized);
 
   if (!parsed.success) {
+    // #region agent log
+    fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'lead-contact.validation.ts:validateEmail',message:'email rejected',data:{reason:'zod',accepted:false},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     return null;
   }
 
   const domain = normalized.split("@")[1] ?? "";
 
   if (PLACEHOLDER_EMAIL_DOMAINS.has(domain)) {
+    // #region agent log
+    fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'lead-contact.validation.ts:validateEmail',message:'email rejected',data:{reason:'placeholder_domain',accepted:false},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     return null;
   }
 
   return normalized;
+}
+
+/** Validates a decision-maker personal email; rejects generic inboxes and company duplicates. */
+export function validatePersonalEmail(
+  value: string | null | undefined,
+  companyEmail?: string | null,
+): string | null {
+  const validated = validateEmail(value);
+
+  if (!validated) {
+    return null;
+  }
+
+  if (isGenericEmailLocalPart(validated)) {
+    // #region agent log
+    fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'lead-contact.validation.ts:validatePersonalEmail',message:'personal email rejected',data:{reason:'generic_local_part',accepted:false},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+    return null;
+  }
+
+  const normalizedCompanyEmail = validateEmail(companyEmail);
+
+  if (normalizedCompanyEmail && validated === normalizedCompanyEmail) {
+    // #region agent log
+    fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'lead-contact.validation.ts:validatePersonalEmail',message:'personal email rejected',data:{reason:'company_duplicate',accepted:false},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+    return null;
+  }
+
+  return validated;
 }
 
 export function validatePhone(value: string | null | undefined): string | null {

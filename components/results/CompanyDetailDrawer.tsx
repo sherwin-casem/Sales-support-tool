@@ -17,6 +17,7 @@ import {
 } from "@/lib/results/decision-maker-contact";
 import {
   normalizePhoneHref,
+  resolveDisplayEmail,
   resolveDisplayPhone,
 } from "@/lib/results/profile-contacts";
 
@@ -47,6 +48,11 @@ export function CompanyDetailDrawer({
   );
   const decisionMakerContact = resolveDecisionMakerContact(profile);
   const companyPhone = resolveDisplayPhone(profile?.phone ?? null);
+  const companyEmail = resolveDisplayEmail(profile?.email ?? null);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'CompanyDetailDrawer.tsx',message:'company contact resolved',data:{emailChanged:Boolean(profile?.email?.trim())&&companyEmail===null,phoneChanged:Boolean(profile?.phone?.trim())&&companyPhone===null},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
   const drawerTitle =
     focusSection === "decisionMaker"
       ? (decisionMakerContact?.name ?? "Decision maker")
@@ -61,6 +67,7 @@ export function CompanyDetailDrawer({
           result={result}
           profile={profile}
           companyPhone={companyPhone}
+          companyEmail={companyEmail}
           searchCriteria={searchCriteria}
         />
       )}
@@ -113,11 +120,13 @@ function CompanyOverviewContent({
   result,
   profile,
   companyPhone,
+  companyEmail,
   searchCriteria,
 }: {
   result: SearchResultItemResponse;
   profile: SearchResultItemResponse["profile"];
   companyPhone: string | null;
+  companyEmail: string | null;
   searchCriteria: ParsedQuery | null;
 }) {
   return (
@@ -165,7 +174,7 @@ function CompanyOverviewContent({
               Company contact
             </h3>
             <dl className="space-y-3">
-              <ContactItem label="Email" href={profile.email ? `mailto:${profile.email}` : null} text={profile.email} />
+              <ContactItem label="Email" href={companyEmail ? `mailto:${companyEmail}` : null} text={companyEmail} />
               <ContactItem
                 label="Phone"
                 href={companyPhone ? `tel:${normalizePhoneHref(companyPhone)}` : null}

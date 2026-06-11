@@ -4,6 +4,7 @@ import {
   normalizePhoneDigits,
   normalizePhoneHref,
   validateEmail,
+  validatePersonalEmail,
   validatePhone,
 } from "@/lib/validations/lead-contact.validation.js";
 
@@ -22,6 +23,16 @@ describe("lead-contact.validation", () => {
       expect(validateEmail("user@test.com")).toBeNull();
       expect(validateEmail(null)).toBeNull();
       expect(validateEmail("")).toBeNull();
+    });
+  });
+
+  describe("validatePersonalEmail", () => {
+    it("rejects generic inboxes and company duplicates", () => {
+      expect(validatePersonalEmail("info@acme.fi")).toBeNull();
+      expect(validatePersonalEmail("jane.doe@acme.fi", "info@acme.fi")).toBe(
+        "jane.doe@acme.fi",
+      );
+      expect(validatePersonalEmail("info@acme.fi", "info@acme.fi")).toBeNull();
     });
   });
 
