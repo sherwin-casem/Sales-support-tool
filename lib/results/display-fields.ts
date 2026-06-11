@@ -7,6 +7,10 @@ export function isDisplayEmpty(value: string | null | undefined): boolean {
   return displayValue(value) === EMPTY_LABEL;
 }
 
+export function hasDisplayValue(value: string | null | undefined): boolean {
+  return !isDisplayEmpty(value);
+}
+
 export function displayValue(value: string | null | undefined): string {
   if (value === null || value === undefined) {
     return EMPTY_LABEL;
