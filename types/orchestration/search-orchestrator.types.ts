@@ -21,6 +21,7 @@ export interface SearchOrchestrationSummary {
   extracted: number;
   enriched: number;
   failed: number;
+  removed: number;
   skippedDuplicates: number;
 }
 

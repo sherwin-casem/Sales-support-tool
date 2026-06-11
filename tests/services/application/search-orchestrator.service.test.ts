@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { QueryParserError } from "@/types/agents/agent-error.types.js";
+import { QueryParserError, LeadEnrichmentError } from "@/types/agents/agent-error.types.js";
+import { WebsiteCrawlerError } from "@/types/crawler/crawler-error.types.js";
 import { SearchOrchestrator } from "@/services/application/search-orchestrator.service.js";
 import { ok, err } from "@/lib/utils/result.js";
 import type { SearchOrchestratorDependencies } from "@/services/application/search-orchestrator.service.js";
@@ -198,6 +199,7 @@ function createDependencies(
           stageError: input.stageError ?? null,
         }),
       ),
+      deleteResult: vi.fn().mockResolvedValue(undefined),
       findResultById: vi.fn(),
     },
     companyRepository: {
@@ -311,6 +313,69 @@ describe("SearchOrchestrator", () => {
       expect.objectContaining({
         paths: ["/contact", "/about", "/team"],
       }),
+    );
+  });
+
+  it("falls back to full website crawl when web enrichment fails", async () => {
+    const deps = createDependencies();
+    deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
+      err(new LeadEnrichmentError("VALIDATION_ERROR", "estimatedCompanySize must match 50-200, 100+, or unknown")),
+    );
+
+    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.summary.crawled).toBe(1);
+      expect(result.value.summary.extracted).toBe(1);
+      expect(result.value.summary.enriched).toBe(1);
+      expect(result.value.summary.failed).toBe(0);
+    }
+
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paths: ["/", "/about", "/company", "/contact", "/careers"],
+      }),
+    );
+    expect(deps.companyExtraction.extract).toHaveBeenCalledOnce();
+    expect(deps.companyRepository.saveProfile).toHaveBeenCalledOnce();
+  });
+
+  it("removes the search result when web enrichment and crawl fallback both fail", async () => {
+    const deps = createDependencies();
+    deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
+      err(new LeadEnrichmentError("OPENAI_ERROR", "Rate limit exceeded")),
+    );
+    deps.websiteCrawler.crawl = vi.fn().mockResolvedValue(
+      err(new WebsiteCrawlerError("CRAWL_FAILED", "All crawl paths failed")),
+    );
+
+    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.status).toBe("FAILED");
+      expect(result.value.summary.enriched).toBe(0);
+      expect(result.value.summary.removed).toBe(1);
+      expect(result.value.summary.failed).toBe(0);
+      expect(result.value.failures[0]?.stage).toBe("REMOVED");
+      expect(result.value.failures[0]?.message).toContain("Web enrichment failed");
+      expect(result.value.failures[0]?.message).toContain("website crawl failed");
+    }
+
+    expect(deps.searchRepository.deleteResult).toHaveBeenCalledWith(searchResultId);
+    expect(deps.searchRepository.updateResultStage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ stage: "ENRICH_FAILED" }),
     );
   });
 
@@ -585,7 +650,7 @@ describe("SearchOrchestrator", () => {
     expect(deps.leadEnrichment.enrich).toHaveBeenCalledTimes(4);
   });
 
-  it("continues when one company enrichment fails and completes with partial failures", async () => {
+  it("removes failed leads and completes when at least one company enriches", async () => {
     const secondResultId = "00000000-0000-4000-8000-000000000041";
     const secondCompanyId = "00000000-0000-4000-8000-000000000011";
 
@@ -668,10 +733,13 @@ describe("SearchOrchestrator", () => {
     if (result.ok) {
       expect(result.value.status).toBe("COMPLETED");
       expect(result.value.summary.enriched).toBe(1);
-      expect(result.value.summary.failed).toBe(1);
+      expect(result.value.summary.removed).toBe(1);
+      expect(result.value.summary.failed).toBe(0);
       expect(result.value.failures).toHaveLength(1);
-      expect(result.value.failures[0]?.stage).toBe("ENRICH_FAILED");
+      expect(result.value.failures[0]?.stage).toBe("REMOVED");
     }
+
+    expect(deps.searchRepository.deleteResult).toHaveBeenCalledWith(secondResultId);
   });
 
   it("marks job failed when discovery returns no companies", async () => {

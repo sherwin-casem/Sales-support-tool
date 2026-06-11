@@ -35,6 +35,7 @@ export type MockPrismaClient = PrismaClient & {
     findMany: MockFn;
     findUnique: MockFn;
     update: MockFn;
+    delete: MockFn;
   };
   $transaction: MockFn;
 };
@@ -201,6 +202,7 @@ export function createMockPrismaClient() {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback(client),

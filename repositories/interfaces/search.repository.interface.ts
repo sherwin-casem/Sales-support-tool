@@ -42,6 +42,7 @@ export interface SearchRepository {
     input: UpdateSearchResultStageInput,
     tx?: DbClient,
   ): Promise<SearchResultRecord>;
+  deleteResult(searchResultId: string, tx?: DbClient): Promise<void>;
   findResultById(id: string, tx?: DbClient): Promise<SearchResultRecord | null>;
   findJobByIdForUser(
     id: string,
