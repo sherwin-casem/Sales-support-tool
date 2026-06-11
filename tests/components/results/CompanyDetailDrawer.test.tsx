@@ -26,6 +26,7 @@ function createSearchResult(
       decisionMakerEmail: "jane@acme.fi",
       decisionMakerPhone: "+358 9 111 2222",
       decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
+      products: ["Tracking Platform", "Fleet API"],
       email: "info@acme.fi",
       phone: "+358 9 333 4444",
       linkedInUrl: "https://linkedin.com/company/acme",
@@ -53,29 +54,44 @@ function renderDrawer(
 }
 
 describe("CompanyDetailDrawer", () => {
-  it("shows only personal contact content when focused on the decision maker", () => {
+  it("renders company sections without decision maker contact in overview mode", () => {
+    const html = renderDrawer(createSearchResult(), "overview");
+
+    expect(html).toContain("Acme Logistics Oy");
+    expect(html).toContain("Overview");
+    expect(html).toContain("Technology");
+    expect(html).toContain("Tracking Platform");
+    expect(html).toContain("Company contact");
+    expect(html).toContain("info@acme.fi");
+    expect(html).toContain("Target customers");
+    expect(html).not.toContain("Decision maker contact");
+    expect(html).not.toContain("jane@acme.fi");
+  });
+
+  it("places company contact after services and target customers", () => {
+    const html = renderDrawer(createSearchResult(), "overview");
+
+    expect(html.indexOf("Services")).toBeLessThan(html.indexOf("Company contact"));
+    expect(html.indexOf("Target customers")).toBeLessThan(html.indexOf("Company contact"));
+    expect(html.indexOf("info@acme.fi")).toBeGreaterThan(html.indexOf("Target customers"));
+  });
+
+  it("renders only personal decision maker contact in decision maker mode", () => {
     const html = renderDrawer(createSearchResult(), "decisionMaker");
 
     expect(html).toContain("Jane Doe, CEO");
+    expect(html).toContain("Decision maker contact");
     expect(html).toContain("jane@acme.fi");
     expect(html).toContain("+358 9 111 2222");
     expect(html).toContain("https://linkedin.com/in/janedoe");
-    expect(html).toContain("Decision maker contact");
-    expect(html).not.toContain("Visit website");
+    expect(html).not.toContain("Acme Logistics Oy");
     expect(html).not.toContain("Overview");
+    expect(html).not.toContain("Technology");
     expect(html).not.toContain("Company contact");
     expect(html).not.toContain("info@acme.fi");
-    expect(html).not.toContain("Target customers");
   });
 
-  it("uses the decision maker name as the drawer title in decision maker mode", () => {
-    const html = renderDrawer(createSearchResult(), "decisionMaker");
-
-    expect(html).toContain("Jane Doe, CEO");
-    expect(html).not.toContain("Acme Logistics Oy");
-  });
-
-  it("shows the empty personal contact message when personal fields are missing", () => {
+  it("shows an empty personal contact message when personal fields are missing", () => {
     const html = renderDrawer(
       createSearchResult({
         decisionMakerEmail: null,
@@ -89,15 +105,9 @@ describe("CompanyDetailDrawer", () => {
     expect(html).not.toContain("Company contact");
   });
 
-  it("shows the full company layout in overview mode", () => {
-    const html = renderDrawer(createSearchResult(), "overview");
+  it("shows an empty technology state when no products are extracted", () => {
+    const html = renderDrawer(createSearchResult({ products: [] }));
 
-    expect(html).toContain("Acme Logistics Oy");
-    expect(html).toContain("Visit website");
-    expect(html).toContain("Overview");
-    expect(html).toContain("Company contact");
-    expect(html).toContain("info@acme.fi");
-    expect(html).toContain("Target customers");
-    expect(html).toContain("Jane Doe, CEO");
+    expect(html).toContain("No technology identified");
   });
 });

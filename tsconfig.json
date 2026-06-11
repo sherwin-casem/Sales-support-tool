@@ -62,6 +62,7 @@
     "repositories/**/*.ts",
     "services/**/*.ts",
     "tests/**/*.ts",
+    "tests/**/*.tsx",
     "types/**/*.ts",
     "vitest.config.ts",
     ".next/types/**/*.ts"
