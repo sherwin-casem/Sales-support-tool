@@ -62,6 +62,7 @@ export interface SearchOrchestratorOptions {
   crawlConcurrency?: number;
   extractionConcurrency?: number;
   enrichmentConcurrency?: number;
+  minProfileCompleteness?: number;
 }
 
 interface StageOutcome {
@@ -99,6 +100,7 @@ export class SearchOrchestrator {
   private readonly crawlConcurrency: number;
   private readonly extractionConcurrency: number;
   private readonly enrichmentConcurrency: number;
+  private readonly minProfileCompleteness: number;
 
   constructor(
     private readonly deps: SearchOrchestratorDependencies,
@@ -114,6 +116,8 @@ export class SearchOrchestrator {
       options.extractionConcurrency ?? pipelineConfig.SEARCH_EXTRACTION_CONCURRENCY;
     this.enrichmentConcurrency =
       options.enrichmentConcurrency ?? pipelineConfig.SEARCH_ENRICHMENT_CONCURRENCY;
+    this.minProfileCompleteness =
+      options.minProfileCompleteness ?? pipelineConfig.SEARCH_MIN_PROFILE_COMPLETENESS;
   }
 
   async run(
@@ -422,55 +426,89 @@ export class SearchOrchestrator {
         );
       }
 
-      await this.persistEnrichedLead(
-        searchResult.id,
+      return this.finalizeLeadProfile(
+        searchResult,
         company.id,
+        company.websiteUrl!,
+        company.normalizedDomain,
         fallbackOutcome.profile,
         {
           modelUsed: fallbackOutcome.extractionMeta.modelUsed,
           promptVersion: fallbackOutcome.extractionMeta.promptVersion,
           extractedAt: new Date(fallbackOutcome.extractionMeta.extractedAt),
         },
+        {
+          crawled: fallbackOutcome.crawled,
+          extracted: fallbackOutcome.extracted,
+        },
       );
-
-      return {
-        crawled: fallbackOutcome.crawled,
-        extracted: fallbackOutcome.extracted,
-        enriched: 1,
-        removed: 0,
-        failed: 0,
-        failures: [],
-      };
     }
 
-    let profile = enrichmentResult.value.profile;
-    let crawled = 0;
-    let extracted = 0;
+    return this.finalizeLeadProfile(
+      searchResult,
+      company.id,
+      company.websiteUrl!,
+      company.normalizedDomain,
+      enrichmentResult.value.profile,
+      {
+        modelUsed: enrichmentResult.value.meta.modelUsed,
+        promptVersion: enrichmentResult.value.meta.promptVersion,
+        extractedAt: new Date(enrichmentResult.value.meta.enrichedAt),
+      },
+      { crawled: 0, extracted: 0 },
+    );
+  }
 
-    if (hasOutreachContactGaps(profile)) {
+  private async finalizeLeadProfile(
+    searchResult: SearchResultRecord,
+    companyId: string,
+    website: string,
+    normalizedDomain: string,
+    profile: ExtractedCompany,
+    meta: SavedProfileMeta,
+    priorCounts: { crawled: number; extracted: number },
+  ): Promise<StageOutcome> {
+    let currentProfile = profile;
+    let crawled = priorCounts.crawled;
+    let extracted = priorCounts.extracted;
+
+    if (hasOutreachContactGaps(currentProfile)) {
       const contactOutcome = await this.supplementProfileFromContactPages(
         searchResult.id,
-        company.id,
-        company.websiteUrl!,
-        company.normalizedDomain,
-        profile,
+        companyId,
+        website,
+        normalizedDomain,
+        currentProfile,
       );
 
       if (contactOutcome.profile) {
-        profile = contactOutcome.profile;
+        currentProfile = contactOutcome.profile;
       }
 
-      crawled = contactOutcome.crawled;
-      extracted = contactOutcome.extracted;
+      crawled += contactOutcome.crawled;
+      extracted += contactOutcome.extracted;
     }
 
-    await this.persistEnrichedLead(searchResult.id, company.id, profile, {
-      modelUsed: enrichmentResult.value.meta.modelUsed,
-      promptVersion: enrichmentResult.value.meta.promptVersion,
-      extractedAt: new Date(enrichmentResult.value.meta.enrichedAt),
-    });
+    const completeness = computeExtractionCompleteness(currentProfile);
 
-    return { crawled, extracted, enriched: 1, removed: 0, failed: 0, failures: [] };
+    if (completeness < this.minProfileCompleteness) {
+      return this.removeUnenrichedLead(
+        searchResult.id,
+        companyId,
+        `Profile completeness ${completeness.toFixed(3)} is below minimum ${this.minProfileCompleteness}`,
+      );
+    }
+
+    await this.persistEnrichedLead(searchResult.id, companyId, currentProfile, meta);
+
+    return {
+      crawled,
+      extracted,
+      enriched: 1,
+      removed: 0,
+      failed: 0,
+      failures: [],
+    };
   }
 
   private async enrichProfileFromWebsiteCrawl(

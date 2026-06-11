@@ -316,13 +316,29 @@ describe("SearchOrchestrator", () => {
     );
   });
 
-  it("falls back to full website crawl when web enrichment fails", async () => {
+  it("falls back to full website crawl and supplements contacts when web enrichment fails", async () => {
     const deps = createDependencies();
     deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
       err(new LeadEnrichmentError("VALIDATION_ERROR", "estimatedCompanySize must match 50-200, 100+, or unknown")),
     );
+    deps.companyExtraction.extract = vi.fn().mockResolvedValue(
+      ok({
+        profile: createExtractedCompanyProfile({
+          decisionMaker: "unknown",
+          linkedInUrl: null,
+          email: null,
+        }),
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          contentHash: "hash-fallback",
+          extractedAt: "2026-06-07T12:01:00.000Z",
+          completeness: 0.6,
+        },
+      }),
+    );
 
-    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1, minProfileCompleteness: 0 });
     const result = await orchestrator.run({
       userId,
       query: "Find logistics companies in Finland with 50-200 employees",
@@ -331,8 +347,8 @@ describe("SearchOrchestrator", () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.value.summary.crawled).toBe(1);
-      expect(result.value.summary.extracted).toBe(1);
+      expect(result.value.summary.crawled).toBe(2);
+      expect(result.value.summary.extracted).toBe(2);
       expect(result.value.summary.enriched).toBe(1);
       expect(result.value.summary.failed).toBe(0);
     }
@@ -342,8 +358,75 @@ describe("SearchOrchestrator", () => {
         paths: ["/", "/about", "/company", "/contact", "/careers"],
       }),
     );
-    expect(deps.companyExtraction.extract).toHaveBeenCalledOnce();
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paths: ["/contact", "/about", "/team"],
+      }),
+    );
+    expect(deps.companyExtraction.extract).toHaveBeenCalledTimes(2);
     expect(deps.companyRepository.saveProfile).toHaveBeenCalledOnce();
+  });
+
+  it("removes the search result when profile completeness is below the minimum", async () => {
+    const sparseProfile = createExtractedCompanyProfile({
+      description: "unknown",
+      industry: "saas",
+      products: [],
+      services: [],
+      targetCustomers: [],
+      estimatedCompanySize: "unknown",
+      city: "unknown",
+      country: "unknown",
+      decisionMaker: "unknown",
+      linkedInUrl: null,
+      email: null,
+      revenue: "unknown",
+    });
+
+    const deps = createDependencies();
+    deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
+      ok({
+        profile: sparseProfile,
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          enrichedAt: "2026-06-07T12:02:00.000Z",
+        },
+      }),
+    );
+    deps.companyExtraction.extract = vi.fn().mockResolvedValue(
+      ok({
+        profile: sparseProfile,
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          contentHash: "hash-sparse",
+          extractedAt: "2026-06-07T12:01:00.000Z",
+          completeness: 0.2,
+        },
+      }),
+    );
+
+    const orchestrator = new SearchOrchestrator(deps, {
+      maxAttempts: 1,
+      minProfileCompleteness: 0.35,
+    });
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.status).toBe("FAILED");
+      expect(result.value.summary.enriched).toBe(0);
+      expect(result.value.summary.removed).toBe(1);
+      expect(result.value.failures[0]?.message).toContain("below minimum 0.35");
+    }
+
+    expect(deps.searchRepository.deleteResult).toHaveBeenCalledWith(searchResultId);
+    expect(deps.companyRepository.saveProfile).not.toHaveBeenCalled();
   });
 
   it("removes the search result when web enrichment and crawl fallback both fail", async () => {
