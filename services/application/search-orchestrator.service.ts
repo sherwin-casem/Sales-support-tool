@@ -16,7 +16,11 @@ import type {
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { LlmReadyContent } from "@/types/content/text-cleaning.types.js";
-import { CONTACT_CRAWL_PATHS } from "@/types/crawler/crawler.types.js";
+import {
+  CONTACT_CRAWL_PATHS,
+  CRAWL_PATHS,
+  type CrawlPath,
+} from "@/types/crawler/crawler.types.js";
 import type { CrawlCompanyResult } from "@/types/crawler/crawler.types.js";
 import { createDiscoveryStubProfile } from "@/services/domain/enrichment/discovery-stub-profile.service.js";
 import { hasOutreachContactGaps } from "@/services/domain/enrichment/outreach-gaps.service.js";
@@ -64,8 +68,26 @@ interface StageOutcome {
   crawled: number;
   extracted: number;
   enriched: number;
+  removed: number;
   failed: number;
   failures: SearchStageFailure[];
+}
+
+interface CrawlExtractOutcome {
+  profile?: ExtractedCompany;
+  crawled: number;
+  extracted: number;
+  extractionMeta?: {
+    modelUsed: string;
+    promptVersion: string;
+    extractedAt: string;
+  };
+}
+
+interface SavedProfileMeta {
+  modelUsed: string;
+  promptVersion: string;
+  extractedAt: Date;
 }
 
 const DEFAULT_MAX_ATTEMPTS = 2;
@@ -220,12 +242,7 @@ export class SearchOrchestrator {
 
       await this.deps.searchRepository.updateJobStatus(searchJobId, finalStatus, {
         completedAt: new Date(),
-        errorMessage:
-          summary.enriched > 0 && summary.failed > 0
-            ? `Completed with partial failures (${summary.failed} failed stages)`
-            : summary.enriched === 0
-              ? "No leads were fully processed"
-              : null,
+        errorMessage: buildJobCompletionMessage(summary),
       });
 
       const durationMs = Date.now() - startedAt;
@@ -351,7 +368,7 @@ export class SearchOrchestrator {
     const company = await this.deps.companyRepository.findById(searchResult.companyId);
 
     if (!company?.websiteUrl) {
-      return this.markEnrichFailed(
+      return this.removeUnenrichedLead(
         searchResult.id,
         searchResult.companyId,
         "Company website is missing for enrichment",
@@ -376,11 +393,54 @@ export class SearchOrchestrator {
     );
 
     if (!enrichmentResult.ok) {
-      return this.markEnrichFailed(
+      logger.info("SearchOrchestrator web enrichment failed, attempting crawl fallback", {
+        searchResultId: searchResult.id,
+        companyId: company.id,
+        message: enrichmentResult.error.message,
+      });
+
+      const fallbackOutcome = await this.enrichProfileFromWebsiteCrawl(
         searchResult.id,
         company.id,
-        enrichmentResult.error.message,
+        company.websiteUrl!,
+        company.normalizedDomain,
+        stubProfile,
       );
+
+      if (!fallbackOutcome.profile || !fallbackOutcome.extractionMeta) {
+        const fallbackReason =
+          fallbackOutcome.crawled === 0
+            ? "website crawl failed"
+            : fallbackOutcome.extracted === 0
+              ? "profile extraction from crawled pages failed"
+              : "crawl fallback produced no profile";
+
+        return this.removeUnenrichedLead(
+          searchResult.id,
+          company.id,
+          `Web enrichment failed (${enrichmentResult.error.message}); ${fallbackReason}`,
+        );
+      }
+
+      await this.persistEnrichedLead(
+        searchResult.id,
+        company.id,
+        fallbackOutcome.profile,
+        {
+          modelUsed: fallbackOutcome.extractionMeta.modelUsed,
+          promptVersion: fallbackOutcome.extractionMeta.promptVersion,
+          extractedAt: new Date(fallbackOutcome.extractionMeta.extractedAt),
+        },
+      );
+
+      return {
+        crawled: fallbackOutcome.crawled,
+        extracted: fallbackOutcome.extracted,
+        enriched: 1,
+        removed: 0,
+        failed: 0,
+        failures: [],
+      };
     }
 
     let profile = enrichmentResult.value.profile;
@@ -404,25 +464,31 @@ export class SearchOrchestrator {
       extracted = contactOutcome.extracted;
     }
 
-    const contentHash = hashEnrichmentProfile(profile);
-
-    await this.deps.companyRepository.saveProfile({
-      companyId: company.id,
-      structuredData: profile,
-      completeness: computeExtractionCompleteness(profile),
+    await this.persistEnrichedLead(searchResult.id, company.id, profile, {
       modelUsed: enrichmentResult.value.meta.modelUsed,
       promptVersion: enrichmentResult.value.meta.promptVersion,
-      contentHash,
       extractedAt: new Date(enrichmentResult.value.meta.enrichedAt),
     });
 
-    await this.deps.searchRepository.updateResultStage({
-      searchResultId: searchResult.id,
-      stage: SearchResultStage.ENRICHED,
-      completedAt: new Date(),
-    });
+    return { crawled, extracted, enriched: 1, removed: 0, failed: 0, failures: [] };
+  }
 
-    return { crawled, extracted, enriched: 1, failed: 0, failures: [] };
+  private async enrichProfileFromWebsiteCrawl(
+    searchResultId: string,
+    companyId: string,
+    website: string,
+    normalizedDomain: string,
+    stubProfile: ExtractedCompany,
+  ): Promise<CrawlExtractOutcome> {
+    return this.crawlAndExtractProfile({
+      searchResultId,
+      companyId,
+      website,
+      normalizedDomain,
+      paths: CRAWL_PATHS,
+      mergeWith: stubProfile,
+      logContext: "crawl_fallback",
+    });
   }
 
   private async supplementProfileFromContactPages(
@@ -431,43 +497,73 @@ export class SearchOrchestrator {
     website: string,
     normalizedDomain: string,
     webProfile: ExtractedCompany,
-  ): Promise<{ profile?: ExtractedCompany; crawled: number; extracted: number }> {
-    await this.deps.searchRepository.updateResultStage({
+  ): Promise<CrawlExtractOutcome> {
+    return this.crawlAndExtractProfile({
       searchResultId,
+      companyId,
+      website,
+      normalizedDomain,
+      paths: CONTACT_CRAWL_PATHS,
+      mergeWith: webProfile,
+      logContext: "contact_supplement",
+      nonFatalCrawlFailure: true,
+    });
+  }
+
+  private async crawlAndExtractProfile(input: {
+    searchResultId: string;
+    companyId: string;
+    website: string;
+    normalizedDomain: string;
+    paths: readonly CrawlPath[];
+    mergeWith?: ExtractedCompany;
+    logContext: "crawl_fallback" | "contact_supplement";
+    nonFatalCrawlFailure?: boolean;
+  }): Promise<CrawlExtractOutcome> {
+    await this.deps.searchRepository.updateResultStage({
+      searchResultId: input.searchResultId,
       stage: SearchResultStage.CRAWLING,
     });
 
     const crawlResult = await this.runWithResultRetry(
       () =>
         this.deps.websiteCrawler.crawl({
-          companyId,
-          website,
-          normalizedDomain,
-          paths: CONTACT_CRAWL_PATHS,
+          companyId: input.companyId,
+          website: input.website,
+          normalizedDomain: input.normalizedDomain,
+          paths: input.paths,
         }),
       (error) => error.code === "CRAWL_FAILED" || error.code === "BROWSER_ERROR",
     );
 
     if (!crawlResult.ok) {
-      logger.info("SearchOrchestrator contact crawl skipped after failure", {
-        searchResultId,
-        companyId,
+      logger.info("SearchOrchestrator crawl skipped after failure", {
+        searchResultId: input.searchResultId,
+        companyId: input.companyId,
+        logContext: input.logContext,
         message: crawlResult.error.message,
       });
 
       return { crawled: 0, extracted: 0 };
     }
 
-    await this.deps.companyRepository.markCrawled(companyId);
+    await this.deps.companyRepository.markCrawled(input.companyId);
 
     const llmContent = this.buildLlmContent(crawlResult.value);
 
     if (llmContent.length < 100) {
+      logger.info("SearchOrchestrator crawl produced insufficient content for extraction", {
+        searchResultId: input.searchResultId,
+        companyId: input.companyId,
+        logContext: input.logContext,
+        contentLength: llmContent.length,
+      });
+
       return { crawled: 1, extracted: 0 };
     }
 
     await this.deps.searchRepository.updateResultStage({
-      searchResultId,
+      searchResultId: input.searchResultId,
       stage: SearchResultStage.EXTRACTING,
     });
 
@@ -475,8 +571,8 @@ export class SearchOrchestrator {
       () =>
         this.deps.companyExtraction.extract({
           content: llmContent,
-          domain: normalizedDomain,
-          companyId,
+          domain: input.normalizedDomain,
+          companyId: input.companyId,
         }),
       (error) =>
         error.code === "OPENAI_ERROR" ||
@@ -485,14 +581,57 @@ export class SearchOrchestrator {
     );
 
     if (!extractionResult.ok) {
+      if (!input.nonFatalCrawlFailure) {
+        logger.info("SearchOrchestrator crawl extraction failed", {
+          searchResultId: input.searchResultId,
+          companyId: input.companyId,
+          logContext: input.logContext,
+          message: extractionResult.error.message,
+        });
+      }
+
       return { crawled: 1, extracted: 0 };
     }
 
+    const profile = input.mergeWith
+      ? mergeExtractedProfiles(extractionResult.value.profile, input.mergeWith)
+      : extractionResult.value.profile;
+
     return {
-      profile: mergeExtractedProfiles(extractionResult.value.profile, webProfile),
+      profile,
       crawled: 1,
       extracted: 1,
+      extractionMeta: {
+        modelUsed: extractionResult.value.meta.modelUsed,
+        promptVersion: extractionResult.value.meta.promptVersion,
+        extractedAt: extractionResult.value.meta.extractedAt,
+      },
     };
+  }
+
+  private async persistEnrichedLead(
+    searchResultId: string,
+    companyId: string,
+    profile: ExtractedCompany,
+    meta: SavedProfileMeta,
+  ): Promise<void> {
+    const contentHash = hashEnrichmentProfile(profile);
+
+    await this.deps.companyRepository.saveProfile({
+      companyId,
+      structuredData: profile,
+      completeness: computeExtractionCompleteness(profile),
+      modelUsed: meta.modelUsed,
+      promptVersion: meta.promptVersion,
+      contentHash,
+      extractedAt: meta.extractedAt,
+    });
+
+    await this.deps.searchRepository.updateResultStage({
+      searchResultId,
+      stage: SearchResultStage.ENRICHED,
+      completedAt: new Date(),
+    });
   }
 
   private buildLlmContent(crawlResult: CrawlCompanyResult): string {
@@ -544,22 +683,33 @@ export class SearchOrchestrator {
     return lastResult!;
   }
 
-  private async markEnrichFailed(
+  private async removeUnenrichedLead(
     searchResultId: string,
     companyId: string,
     message: string,
   ): Promise<StageOutcome> {
-    await this.deps.searchRepository.updateResultStage({
-      searchResultId,
-      stage: SearchResultStage.ENRICH_FAILED,
-      stageError: message,
-    });
-
-    return createStageFailure(SearchResultStage.ENRICH_FAILED, {
+    logger.info("SearchOrchestrator removing unenriched lead from search results", {
       searchResultId,
       companyId,
       message,
-    }, { enriched: 0 });
+    });
+
+    await this.deps.searchRepository.deleteResult(searchResultId);
+
+    return {
+      crawled: 0,
+      extracted: 0,
+      enriched: 0,
+      removed: 1,
+      failed: 0,
+      failures: [
+        {
+          companyId,
+          stage: "REMOVED",
+          message,
+        },
+      ],
+    };
   }
 
   private async failJob(searchJobId: string, message: string): Promise<void> {
@@ -571,20 +721,6 @@ export class SearchOrchestrator {
 
 }
 
-function createStageFailure(
-  stage: SearchStageFailure["stage"],
-  failure: Pick<SearchStageFailure, "searchResultId" | "companyId" | "message">,
-  counts: Partial<Pick<StageOutcome, "crawled" | "extracted" | "enriched">> = {},
-): StageOutcome {
-  return {
-    crawled: counts.crawled ?? 0,
-    extracted: counts.extracted ?? 0,
-    enriched: counts.enriched ?? 0,
-    failed: 1,
-    failures: [{ ...failure, stage }],
-  };
-}
-
 function mergeStageOutcomes(
   summary: SearchOrchestrationSummary,
   failures: SearchStageFailure[],
@@ -594,6 +730,7 @@ function mergeStageOutcomes(
     summary.crawled += outcome.crawled;
     summary.extracted += outcome.extracted;
     summary.enriched += outcome.enriched;
+    summary.removed += outcome.removed;
     summary.failed += outcome.failed;
     failures.push(...outcome.failures);
   }
@@ -606,8 +743,22 @@ function createEmptySummary(): SearchOrchestrationSummary {
     extracted: 0,
     enriched: 0,
     failed: 0,
+    removed: 0,
     skippedDuplicates: 0,
   };
+}
+
+function buildJobCompletionMessage(summary: SearchOrchestrationSummary): string | null {
+  if (summary.enriched === 0) {
+    return "No leads were fully processed";
+  }
+
+  if (summary.removed > 0) {
+    const label = summary.removed === 1 ? "company" : "companies";
+    return `${summary.removed} ${label} could not be enriched and were excluded from results`;
+  }
+
+  return null;
 }
 
 function buildNoCompaniesDiscoveredMessage(query: string, criteria: ParsedQuery): string {

@@ -315,6 +315,20 @@ export class PrismaSearchRepository implements SearchRepository {
     return records.map(mapSearchJob);
   }
 
+  async deleteResult(searchResultId: string, tx?: DbClient): Promise<void> {
+    const client = resolveDbClient(this.prisma, tx);
+
+    try {
+      await client.searchResult.delete({ where: { id: searchResultId } });
+    } catch (error) {
+      throw new RepositoryError(
+        "NOT_FOUND",
+        `Search result not found: ${searchResultId}`,
+        error,
+      );
+    }
+  }
+
   async findResultById(
     id: string,
     tx?: DbClient,

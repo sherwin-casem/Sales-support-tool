@@ -133,6 +133,20 @@ describe("PrismaSearchRepository", () => {
     } satisfies Partial<RepositoryError>);
   });
 
+  it("deletes a search result", async () => {
+    const prisma = createMockPrismaClient();
+    const searchResult = createMockSearchResult({ id: "00000000-0000-4000-8000-000000000041" });
+
+    prisma.searchResult.delete.mockResolvedValue(searchResult);
+
+    const repository = new PrismaSearchRepository(prisma);
+    await repository.deleteResult(searchResult.id);
+
+    expect(prisma.searchResult.delete).toHaveBeenCalledWith({
+      where: { id: searchResult.id },
+    });
+  });
+
   it("updates search result stage", async () => {
     const prisma = createMockPrismaClient();
     const searchResult = createMockSearchResult({ id: "00000000-0000-4000-8000-000000000041" });
