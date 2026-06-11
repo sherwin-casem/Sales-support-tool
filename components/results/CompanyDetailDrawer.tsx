@@ -15,6 +15,10 @@ import {
   hasDecisionMakerContactDetails,
   resolveDecisionMakerContact,
 } from "@/lib/results/decision-maker-contact";
+import {
+  normalizePhoneHref,
+  resolveDisplayPhone,
+} from "@/lib/results/profile-contacts";
 
 interface CompanyDetailDrawerProps {
   result: SearchResultItemResponse | null;
@@ -42,6 +46,7 @@ export function CompanyDetailDrawer({
     result.company.domain,
   );
   const decisionMakerContact = resolveDecisionMakerContact(profile);
+  const companyPhone = resolveDisplayPhone(profile?.phone ?? null);
   const drawerTitle =
     focusSection === "decisionMaker"
       ? (decisionMakerContact?.name ?? "Decision maker")
@@ -55,6 +60,7 @@ export function CompanyDetailDrawer({
         <CompanyOverviewContent
           result={result}
           profile={profile}
+          companyPhone={companyPhone}
           searchCriteria={searchCriteria}
         />
       )}
@@ -106,10 +112,12 @@ function DecisionMakerOnlyContent({
 function CompanyOverviewContent({
   result,
   profile,
+  companyPhone,
   searchCriteria,
 }: {
   result: SearchResultItemResponse;
   profile: SearchResultItemResponse["profile"];
+  companyPhone: string | null;
   searchCriteria: ParsedQuery | null;
 }) {
   return (
@@ -160,8 +168,8 @@ function CompanyOverviewContent({
               <ContactItem label="Email" href={profile.email ? `mailto:${profile.email}` : null} text={profile.email} />
               <ContactItem
                 label="Phone"
-                href={profile.phone ? `tel:${profile.phone.replace(/[^\d+]/g, "")}` : null}
-                text={profile.phone}
+                href={companyPhone ? `tel:${normalizePhoneHref(companyPhone)}` : null}
+                text={companyPhone}
               />
               <ContactItem label="LinkedIn" href={profile.linkedInUrl} />
               <ContactItem label="X" href={profile.xUrl} />

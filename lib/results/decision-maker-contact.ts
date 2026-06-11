@@ -1,5 +1,6 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 import { displayValue, isDisplayEmpty } from "@/lib/results/display-fields.js";
+import { validatePhone } from "@/lib/validations/lead-contact.validation.js";
 
 export interface DecisionMakerContact {
   name: string;
@@ -18,7 +19,7 @@ export function resolveDecisionMakerContact(
   return {
     name: displayValue(profile.decisionMaker),
     email: profile.decisionMakerEmail ?? null,
-    phone: profile.decisionMakerPhone ?? null,
+    phone: validatePhone(profile.decisionMakerPhone),
     linkedInUrl: profile.decisionMakerLinkedInUrl ?? null,
   };
 }

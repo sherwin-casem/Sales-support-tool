@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  validateEmail,
+  validatePhone,
+} from "@/lib/validations/lead-contact.validation.js";
 import { EMPLOYEE_RANGE_PATTERN } from "@/lib/validations/query-parser.schema.js";
 
 function dedupeStrings(values: string[]): string[] {
@@ -41,14 +45,16 @@ const nullableUrl = z
   .default(null);
 
 const nullableEmail = z
-  .union([z.string().trim().email(), z.null()])
+  .union([z.string(), z.null()])
   .optional()
-  .default(null);
+  .default(null)
+  .transform(validateEmail);
 
 const nullablePhone = z
-  .union([z.string().trim().min(5).max(50), z.null()])
+  .union([z.string(), z.null()])
   .optional()
-  .default(null);
+  .default(null)
+  .transform(validatePhone);
 
 export const ExtractedCompanySchema = z.object({
   companyName: z.string().trim().min(1, "companyName is required").max(500),

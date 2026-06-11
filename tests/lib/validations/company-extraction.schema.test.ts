@@ -58,6 +58,31 @@ describe("ExtractedCompanySchema", () => {
     }
   });
 
+  it("coerces invalid contact fields to null", () => {
+    const result = ExtractedCompanySchema.safeParse({
+      companyName: "Acme Oy",
+      description: "A logistics company.",
+      industry: "logistics",
+      products: [],
+      services: [],
+      targetCustomers: [],
+      estimatedCompanySize: "unknown",
+      email: "not-an-email",
+      phone: "12345",
+      decisionMakerEmail: "bad@@acme.fi",
+      decisionMakerPhone: "abc",
+    });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.email).toBeNull();
+      expect(result.data.phone).toBeNull();
+      expect(result.data.decisionMakerEmail).toBeNull();
+      expect(result.data.decisionMakerPhone).toBeNull();
+    }
+  });
+
   it("rejects invalid estimatedCompanySize", () => {
     const result = ExtractedCompanySchema.safeParse({
       companyName: "Acme Oy",

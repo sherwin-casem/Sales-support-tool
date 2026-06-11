@@ -26,7 +26,7 @@ import type { CrawlCompanyResult } from "@/types/crawler/crawler.types.js";
 import { createDiscoveryStubProfile } from "@/services/domain/enrichment/discovery-stub-profile.service.js";
 import {
   enrichProfileWithDecisionMakerContacts,
-  sanitizeDecisionMakerContacts,
+  sanitizeLeadContacts,
 } from "@/services/domain/enrichment/decision-maker-contact.service.js";
 import { hasOutreachContactGaps } from "@/services/domain/enrichment/outreach-gaps.service.js";
 import { mergeExtractedProfiles } from "@/services/domain/enrichment/profile-merge.service.js";
@@ -473,7 +473,7 @@ export class SearchOrchestrator {
     meta: SavedProfileMeta,
     priorCounts: { crawled: number; extracted: number },
   ): Promise<StageOutcome> {
-    let currentProfile = sanitizeDecisionMakerContacts(profile);
+    let currentProfile = sanitizeLeadContacts(profile);
     let crawled = priorCounts.crawled;
     let extracted = priorCounts.extracted;
 
@@ -499,14 +499,14 @@ export class SearchOrchestrator {
       });
 
       if (contactOutcome.profile) {
-        currentProfile = sanitizeDecisionMakerContacts(contactOutcome.profile);
+        currentProfile = sanitizeLeadContacts(contactOutcome.profile);
       }
 
       crawled += contactOutcome.crawled;
       extracted += contactOutcome.extracted;
     }
 
-    currentProfile = sanitizeDecisionMakerContacts(currentProfile);
+    currentProfile = sanitizeLeadContacts(currentProfile);
 
     const completeness = computeExtractionCompleteness(currentProfile);
 
@@ -649,7 +649,7 @@ export class SearchOrchestrator {
       : extractionResult.value.profile;
 
     profile = enrichProfileWithDecisionMakerContacts(profile, htmlPages);
-    profile = sanitizeDecisionMakerContacts(profile);
+    profile = sanitizeLeadContacts(profile);
 
     return {
       profile,
@@ -677,7 +677,7 @@ export class SearchOrchestrator {
       return undefined;
     }
 
-    return sanitizeDecisionMakerContacts(
+    return sanitizeLeadContacts(
       enrichProfileWithDecisionMakerContacts(profile, htmlPages),
     );
   }

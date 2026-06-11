@@ -24,6 +24,7 @@ import type {
   CompanyListItemRecord,
 } from "@/types/repositories/company.repository.types.js";
 import { toIsoString } from "@/lib/api/request-utils.js";
+import { sanitizeProfileForResponse } from "@/lib/api/sanitize-profile.js";
 
 const FAILED_STAGES: SearchResultStage[] = [
   "CRAWL_FAILED",
@@ -145,7 +146,7 @@ function mapSearchResultItem(
     discoveredAt: rawResult?.discoveredAt.toISOString() ?? new Date(0).toISOString(),
     completedAt: toIsoString(rawResult?.completedAt),
     company: mapCompanySummary(result.company),
-    profile: result.profile?.structuredData ?? null,
+    profile: sanitizeProfileForResponse(result.profile?.structuredData ?? null),
     profileCompleteness: result.profile?.completeness ?? null,
   };
 }
@@ -176,7 +177,7 @@ function mapCompanyProfileDetail(
   return {
     id: profile.id,
     version: profile.version,
-    data: profile.structuredData,
+    data: sanitizeProfileForResponse(profile.structuredData) ?? profile.structuredData,
     completeness: profile.completeness,
     modelUsed: profile.modelUsed,
     promptVersion: profile.promptVersion,

@@ -1,8 +1,12 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
+import {
+  normalizePhoneDigits,
+  validateEmail,
+  validatePhone,
+} from "@/lib/validations/lead-contact.validation.js";
 
 export interface DecisionMakerContactHints {
   email: string | null;
-  phone: string | null;
   linkedInUrl: string | null;
 }
 
@@ -30,17 +34,11 @@ const GENERIC_EMAIL_LOCAL_PARTS = new Set([
 const PROXIMITY_WINDOW_CHARS = 300;
 
 const MAILTO_PATTERN = /mailto:([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi;
-const TEL_PATTERN = /tel:([+\d\s().-]{5,50})/gi;
 const LINKEDIN_IN_PATTERN =
   /https?:\/\/(?:[\w.-]+\.)?linkedin\.com\/in\/[a-z0-9_-]+\/?/gi;
-const PHONE_TEXT_PATTERN = /(?:\+?\d[\d\s().-]{6,}\d)/g;
 
 function isUnknown(value: string): boolean {
   return !value.trim() || value.trim().toLowerCase() === "unknown";
-}
-
-function normalizePhoneDigits(value: string): string {
-  return value.replace(/[^\d+]/g, "");
 }
 
 function isGenericEmail(email: string): boolean {
@@ -111,97 +109,9 @@ function collectProximityMatches(
   return matches;
 }
 
-export function hasDecisionMakerPersonalContactGaps(profile: ExtractedCompany): boolean {
-  if (isUnknown(profile.decisionMaker)) {
-    return true;
-  }
-
-  return !(
-    profile.decisionMakerEmail?.trim() ||
-    profile.decisionMakerPhone?.trim() ||
-    profile.decisionMakerLinkedInUrl?.trim()
-  );
-}
-
-export function extractDecisionMakerContactsFromHtml(
-  html: string,
-  decisionMakerName: string,
-): DecisionMakerContactHints {
-  if (isUnknown(decisionMakerName)) {
-    return { email: null, phone: null, linkedInUrl: null };
-  }
-
-  const nameTokens = tokenizeDecisionMakerName(decisionMakerName);
-  const content = html;
-
-  const emails = collectProximityMatches(content, nameTokens, MAILTO_PATTERN, (match) =>
-    match[1]?.trim().toLowerCase() ?? null,
-  );
-
-  const phonesFromTel = collectProximityMatches(content, nameTokens, TEL_PATTERN, (match) =>
-    match[1]?.trim() ?? null,
-  );
-
-  const phonesFromText = collectProximityMatches(
-    content,
-    nameTokens,
-    PHONE_TEXT_PATTERN,
-    (match) => match[0]?.trim() ?? null,
-  );
-
-  const linkedInUrls = collectProximityMatches(
-    content,
-    nameTokens,
-    LINKEDIN_IN_PATTERN,
-    (match) => match[0]?.trim() ?? null,
-  );
-
-  const email =
-    emails.find((candidate) => candidate && !isGenericEmail(candidate)) ?? null;
-
-  const phone = phonesFromTel[0] ?? phonesFromText[0] ?? null;
-  const linkedInUrl = linkedInUrls[0] ?? null;
-
-  return { email, phone, linkedInUrl };
-}
-
-export function mergeDecisionMakerContactHints(
-  hintsList: DecisionMakerContactHints[],
-): DecisionMakerContactHints {
-  let email: string | null = null;
-  let phone: string | null = null;
-  let linkedInUrl: string | null = null;
-
-  for (const hints of hintsList) {
-    if (!email && hints.email) {
-      email = hints.email;
-    }
-
-    if (!phone && hints.phone) {
-      phone = hints.phone;
-    }
-
-    if (!linkedInUrl && hints.linkedInUrl) {
-      linkedInUrl = hints.linkedInUrl;
-    }
-  }
-
-  return { email, phone, linkedInUrl };
-}
-
-export function applyDecisionMakerContactHints(
+function sanitizeDecisionMakerSemanticRules(
   profile: ExtractedCompany,
-  hints: DecisionMakerContactHints,
 ): ExtractedCompany {
-  return {
-    ...profile,
-    decisionMakerEmail: profile.decisionMakerEmail ?? hints.email,
-    decisionMakerPhone: profile.decisionMakerPhone ?? hints.phone,
-    decisionMakerLinkedInUrl: profile.decisionMakerLinkedInUrl ?? hints.linkedInUrl,
-  };
-}
-
-export function sanitizeDecisionMakerContacts(profile: ExtractedCompany): ExtractedCompany {
   let decisionMakerEmail = profile.decisionMakerEmail;
   let decisionMakerPhone = profile.decisionMakerPhone;
   let decisionMakerLinkedInUrl = profile.decisionMakerLinkedInUrl;
@@ -248,12 +158,103 @@ export function sanitizeDecisionMakerContacts(profile: ExtractedCompany): Extrac
   };
 }
 
+export function sanitizeLeadContacts(profile: ExtractedCompany): ExtractedCompany {
+  const withValidatedFormats: ExtractedCompany = {
+    ...profile,
+    email: validateEmail(profile.email),
+    phone: validatePhone(profile.phone),
+    decisionMakerEmail: validateEmail(profile.decisionMakerEmail),
+    decisionMakerPhone: validatePhone(profile.decisionMakerPhone),
+  };
+
+  return sanitizeDecisionMakerSemanticRules(withValidatedFormats);
+}
+
+export function hasDecisionMakerPersonalContactGaps(profile: ExtractedCompany): boolean {
+  if (isUnknown(profile.decisionMaker)) {
+    return true;
+  }
+
+  return !(
+    profile.decisionMakerEmail?.trim() ||
+    profile.decisionMakerPhone?.trim() ||
+    profile.decisionMakerLinkedInUrl?.trim()
+  );
+}
+
+export function extractDecisionMakerContactsFromHtml(
+  html: string,
+  decisionMakerName: string,
+): DecisionMakerContactHints {
+  if (isUnknown(decisionMakerName)) {
+    return { email: null, linkedInUrl: null };
+  }
+
+  const nameTokens = tokenizeDecisionMakerName(decisionMakerName);
+  const content = html;
+
+  const emails = collectProximityMatches(content, nameTokens, MAILTO_PATTERN, (match) =>
+    match[1]?.trim().toLowerCase() ?? null,
+  );
+
+  const linkedInUrls = collectProximityMatches(
+    content,
+    nameTokens,
+    LINKEDIN_IN_PATTERN,
+    (match) => match[0]?.trim() ?? null,
+  );
+
+  const rawEmail =
+    emails.find((candidate) => candidate && !isGenericEmail(candidate)) ?? null;
+  const linkedInUrl = linkedInUrls[0] ?? null;
+
+  return {
+    email: validateEmail(rawEmail),
+    linkedInUrl,
+  };
+}
+
+export function mergeDecisionMakerContactHints(
+  hintsList: DecisionMakerContactHints[],
+): DecisionMakerContactHints {
+  let email: string | null = null;
+  let linkedInUrl: string | null = null;
+
+  for (const hints of hintsList) {
+    if (!email && hints.email) {
+      email = hints.email;
+    }
+
+    if (!linkedInUrl && hints.linkedInUrl) {
+      linkedInUrl = hints.linkedInUrl;
+    }
+  }
+
+  return { email, linkedInUrl };
+}
+
+export function applyDecisionMakerContactHints(
+  profile: ExtractedCompany,
+  hints: DecisionMakerContactHints,
+): ExtractedCompany {
+  return {
+    ...profile,
+    decisionMakerEmail: profile.decisionMakerEmail ?? hints.email,
+    decisionMakerLinkedInUrl: profile.decisionMakerLinkedInUrl ?? hints.linkedInUrl,
+  };
+}
+
+/** @deprecated Use sanitizeLeadContacts */
+export function sanitizeDecisionMakerContacts(profile: ExtractedCompany): ExtractedCompany {
+  return sanitizeLeadContacts(profile);
+}
+
 export function enrichProfileWithDecisionMakerContacts(
   profile: ExtractedCompany,
   htmlPages: string[],
 ): ExtractedCompany {
   if (isUnknown(profile.decisionMaker)) {
-    return sanitizeDecisionMakerContacts(profile);
+    return sanitizeLeadContacts(profile);
   }
 
   const hintsList = htmlPages.map((html) =>
@@ -263,5 +264,5 @@ export function enrichProfileWithDecisionMakerContacts(
   const mergedHints = mergeDecisionMakerContactHints(hintsList);
   const withHints = applyDecisionMakerContactHints(profile, mergedHints);
 
-  return sanitizeDecisionMakerContacts(withHints);
+  return sanitizeLeadContacts(withHints);
 }

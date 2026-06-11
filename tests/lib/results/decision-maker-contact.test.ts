@@ -44,6 +44,17 @@ describe("decision-maker-contact", () => {
     expect(hasDecisionMakerContactDetails(contact!)).toBe(false);
   });
 
+  it("formats compact decision maker phone numbers for display", () => {
+    const contact = resolveDecisionMakerContact(
+      createExtractedCompanyProfile({
+        decisionMaker: "Jane Doe, CEO",
+        decisionMakerPhone: "+358401234567",
+      }),
+    );
+
+    expect(contact?.phone).toBe("+358 40 123 4567");
+  });
+
   it("returns null when decision maker is unknown", () => {
     expect(resolveDecisionMakerContact(createExtractedCompanyProfile())).toBeNull();
   });
