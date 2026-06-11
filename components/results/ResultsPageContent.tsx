@@ -18,6 +18,10 @@ import {
   type ResultsViewState,
 } from "@/lib/validations/results-view.schema";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types";
+import type {
+  OpenResultDetailOptions,
+  ResultDetailFocus,
+} from "@/types/results/result-detail.types";
 
 interface ResultsPageContentProps {
   searchJobId: string;
@@ -27,6 +31,20 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   const router = useRouter();
   const [view, setView] = useState<ResultsViewState>(DEFAULT_RESULTS_VIEW);
   const [selectedResult, setSelectedResult] = useState<SearchResultItemResponse | null>(null);
+  const [detailFocus, setDetailFocus] = useState<ResultDetailFocus>("overview");
+
+  function handleOpenDetail(
+    result: SearchResultItemResponse,
+    options?: OpenResultDetailOptions,
+  ) {
+    setSelectedResult(result);
+    setDetailFocus(options?.focus ?? "overview");
+  }
+
+  function handleCloseDetail() {
+    setSelectedResult(null);
+    setDetailFocus("overview");
+  }
   const { isSaved, toggleSave } = useSavedCompanies();
 
   const apiFilters = useMemo(
@@ -112,7 +130,7 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
             pagination={processed.pagination}
             searchCriteria={data.criteria}
             isSaved={isSaved}
-            onOpenDetail={setSelectedResult}
+            onOpenDetail={handleOpenDetail}
             onToggleSave={toggleSave}
             onPageChange={(page) => updateView({ page })}
           />
@@ -123,7 +141,8 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
         result={selectedResult}
         searchCriteria={data.criteria}
         open={selectedResult !== null}
-        onClose={() => setSelectedResult(null)}
+        focusSection={detailFocus}
+        onClose={handleCloseDetail}
       />
     </main>
   );

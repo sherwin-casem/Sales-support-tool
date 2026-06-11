@@ -18,9 +18,13 @@ describe("display-fields", () => {
     city: "helsinki",
     country: "finland",
     decisionMaker: "Jane Doe, CEO",
+    decisionMakerEmail: "jane@acme.fi",
+    decisionMakerPhone: "+358 9 123 4567",
+    decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
     linkedInUrl: "https://linkedin.com/company/acme",
     xUrl: null,
     email: "info@acme.fi",
+    phone: "+358 9 765 4321",
     revenue: "10M-50M EUR",
   };
 

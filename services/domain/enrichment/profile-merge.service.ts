@@ -73,9 +73,22 @@ export function mergeExtractedProfiles(
     city: mergeString(websiteProfile.city, webProfile.city),
     country: mergeString(websiteProfile.country, webProfile.country),
     decisionMaker: mergeString(websiteProfile.decisionMaker, webProfile.decisionMaker),
+    decisionMakerEmail: mergeNullable(
+      websiteProfile.decisionMakerEmail,
+      webProfile.decisionMakerEmail,
+    ),
+    decisionMakerPhone: mergeNullable(
+      websiteProfile.decisionMakerPhone,
+      webProfile.decisionMakerPhone,
+    ),
+    decisionMakerLinkedInUrl: mergeNullable(
+      websiteProfile.decisionMakerLinkedInUrl,
+      webProfile.decisionMakerLinkedInUrl,
+    ),
     linkedInUrl: mergeNullable(websiteProfile.linkedInUrl, webProfile.linkedInUrl),
     xUrl: mergeNullable(websiteProfile.xUrl, webProfile.xUrl),
     email: mergeNullable(websiteProfile.email, webProfile.email),
+    phone: mergeNullable(websiteProfile.phone, webProfile.phone),
     revenue: mergeString(websiteProfile.revenue, webProfile.revenue),
   };
 }

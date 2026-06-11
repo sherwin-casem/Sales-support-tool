@@ -20,9 +20,13 @@ const websiteProfile: ExtractedCompany = {
   city: "unknown",
   country: "unknown",
   decisionMaker: "unknown",
+  decisionMakerEmail: null,
+  decisionMakerPhone: null,
+  decisionMakerLinkedInUrl: null,
   linkedInUrl: null,
   xUrl: null,
   email: null,
+  phone: null,
   revenue: "unknown",
 };
 

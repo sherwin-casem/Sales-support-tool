@@ -1,6 +1,7 @@
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types.js";
 import type { PaginationMeta } from "@/types/api/pagination.api.types.js";
+import type { OpenResultDetailOptions } from "@/types/results/result-detail.types.js";
 import { ResultRow } from "@/components/results/ResultRow";
 import { Pagination } from "@/components/ui/Pagination";
 
@@ -9,7 +10,7 @@ interface ResultsListProps {
   pagination: PaginationMeta;
   searchCriteria: ParsedQuery | null;
   isSaved: (companyId: string) => boolean;
-  onOpenDetail: (result: SearchResultItemResponse) => void;
+  onOpenDetail: (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => void;
   onToggleSave: (companyId: string) => void;
   onPageChange: (page: number) => void;
 }

@@ -19,9 +19,13 @@ export interface ExtractedCompany {
   city: string;
   country: string;
   decisionMaker: string;
+  decisionMakerEmail: string | null;
+  decisionMakerPhone: string | null;
+  decisionMakerLinkedInUrl: string | null;
   linkedInUrl: string | null;
   xUrl: string | null;
   email: string | null;
+  phone: string | null;
   revenue: string;
 }
 
