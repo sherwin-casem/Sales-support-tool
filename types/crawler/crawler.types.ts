@@ -3,9 +3,13 @@ export const CRAWL_PATHS = ["/", "/about", "/company", "/contact", "/careers"] a
 /** Targeted paths for hybrid outreach gap-filling (contact / team pages). */
 export const CONTACT_CRAWL_PATHS = ["/contact", "/about", "/team"] as const;
 
+/** Extended leadership/people pages for second-pass personal contact discovery. */
+export const EXTENDED_TEAM_CRAWL_PATHS = ["/leadership", "/people", "/management"] as const;
+
 export const ALL_CRAWL_PATHS = [
   ...CRAWL_PATHS,
   ...CONTACT_CRAWL_PATHS.filter((path) => !(CRAWL_PATHS as readonly string[]).includes(path)),
+  ...EXTENDED_TEAM_CRAWL_PATHS,
 ] as const;
 
 export type CrawlPath = (typeof ALL_CRAWL_PATHS)[number];

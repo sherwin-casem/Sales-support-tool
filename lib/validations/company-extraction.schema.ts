@@ -45,6 +45,11 @@ const nullableEmail = z
   .optional()
   .default(null);
 
+const nullablePhone = z
+  .union([z.string().trim().min(5).max(50), z.null()])
+  .optional()
+  .default(null);
+
 export const ExtractedCompanySchema = z.object({
   companyName: z.string().trim().min(1, "companyName is required").max(500),
   description: z.string().trim().min(1, "description is required").max(2000),
@@ -75,9 +80,13 @@ export const ExtractedCompanySchema = z.object({
     .min(1, "decisionMaker is required")
     .max(500)
     .default("unknown"),
+  decisionMakerEmail: nullableEmail,
+  decisionMakerPhone: nullablePhone,
+  decisionMakerLinkedInUrl: nullableUrl,
   linkedInUrl: nullableUrl,
   xUrl: nullableUrl,
   email: nullableEmail,
+  phone: nullablePhone,
   revenue: z
     .string()
     .trim()
@@ -151,6 +160,18 @@ export const EXTRACTED_COMPANY_JSON_SCHEMA = {
       type: "string",
       description: "Named executive or decision maker with title if found; unknown if not found",
     },
+    decisionMakerEmail: {
+      type: ["string", "null"],
+      description: "Decision maker direct email if found; null otherwise",
+    },
+    decisionMakerPhone: {
+      type: ["string", "null"],
+      description: "Decision maker direct phone number if found; null otherwise",
+    },
+    decisionMakerLinkedInUrl: {
+      type: ["string", "null"],
+      description: "Decision maker personal LinkedIn profile URL if found; null otherwise",
+    },
     linkedInUrl: {
       type: ["string", "null"],
       description: "LinkedIn company or profile URL if found on the website; null otherwise",
@@ -162,6 +183,10 @@ export const EXTRACTED_COMPANY_JSON_SCHEMA = {
     email: {
       type: ["string", "null"],
       description: "Public contact email if found on the website; null otherwise",
+    },
+    phone: {
+      type: ["string", "null"],
+      description: "Public company phone number if found on the website; null otherwise",
     },
     revenue: {
       type: "string",
@@ -179,9 +204,13 @@ export const EXTRACTED_COMPANY_JSON_SCHEMA = {
     "city",
     "country",
     "decisionMaker",
+    "decisionMakerEmail",
+    "decisionMakerPhone",
+    "decisionMakerLinkedInUrl",
     "linkedInUrl",
     "xUrl",
     "email",
+    "phone",
     "revenue",
   ],
   additionalProperties: false,
@@ -190,19 +219,23 @@ export const EXTRACTED_COMPANY_JSON_SCHEMA = {
 export function computeExtractionCompleteness(profile: ExtractedCompanyOutput): number {
   let score = 0;
   const weights = {
-    companyName: 0.1,
-    description: 0.1,
-    industry: 0.1,
-    products: 0.08,
-    services: 0.08,
-    targetCustomers: 0.08,
+    companyName: 0.09,
+    description: 0.09,
+    industry: 0.09,
+    products: 0.07,
+    services: 0.07,
+    targetCustomers: 0.07,
     estimatedCompanySize: 0.08,
     city: 0.06,
     country: 0.06,
     decisionMaker: 0.08,
-    linkedInUrl: 0.06,
-    xUrl: 0.04,
-    email: 0.06,
+    decisionMakerEmail: 0.03,
+    decisionMakerPhone: 0.03,
+    decisionMakerLinkedInUrl: 0.03,
+    linkedInUrl: 0.05,
+    xUrl: 0.03,
+    email: 0.05,
+    phone: 0.03,
     revenue: 0.08,
   };
 
@@ -216,9 +249,13 @@ export function computeExtractionCompleteness(profile: ExtractedCompanyOutput): 
   if (profile.city !== "unknown") score += weights.city;
   if (profile.country !== "unknown") score += weights.country;
   if (profile.decisionMaker !== "unknown") score += weights.decisionMaker;
+  if (profile.decisionMakerEmail) score += weights.decisionMakerEmail;
+  if (profile.decisionMakerPhone) score += weights.decisionMakerPhone;
+  if (profile.decisionMakerLinkedInUrl) score += weights.decisionMakerLinkedInUrl;
   if (profile.linkedInUrl) score += weights.linkedInUrl;
   if (profile.xUrl) score += weights.xUrl;
   if (profile.email) score += weights.email;
+  if (profile.phone) score += weights.phone;
   if (profile.revenue !== "unknown") score += weights.revenue;
 
   return Math.round(score * 1000) / 1000;

@@ -1,7 +1,11 @@
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 
-const EMPTY_LABEL = "—";
+export const EMPTY_LABEL = "—";
+
+export function isDisplayEmpty(value: string | null | undefined): boolean {
+  return displayValue(value) === EMPTY_LABEL;
+}
 
 export function displayValue(value: string | null | undefined): string {
   if (value === null || value === undefined) {

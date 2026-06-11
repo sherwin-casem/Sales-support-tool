@@ -134,6 +134,8 @@ function createDependencies(
             city: "helsinki",
             country: "finland",
             decisionMaker: "Jane Doe, CEO",
+            decisionMakerEmail: "jane@acme.fi",
+            decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
             linkedInUrl: "https://linkedin.com/company/acme",
             email: "info@acme.fi",
           },
@@ -304,14 +306,19 @@ describe("SearchOrchestrator", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.summary.crawled).toBe(1);
-      expect(result.value.summary.extracted).toBe(1);
+      expect(result.value.summary.crawled).toBe(2);
+      expect(result.value.summary.extracted).toBe(2);
       expect(result.value.summary.enriched).toBe(1);
     }
 
     expect(deps.websiteCrawler.crawl).toHaveBeenCalledWith(
       expect.objectContaining({
         paths: ["/contact", "/about", "/team"],
+      }),
+    );
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paths: ["/leadership", "/people", "/management"],
       }),
     );
   });
@@ -347,8 +354,8 @@ describe("SearchOrchestrator", () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.value.summary.crawled).toBe(2);
-      expect(result.value.summary.extracted).toBe(2);
+      expect(result.value.summary.crawled).toBe(3);
+      expect(result.value.summary.extracted).toBe(3);
       expect(result.value.summary.enriched).toBe(1);
       expect(result.value.summary.failed).toBe(0);
     }
@@ -363,7 +370,12 @@ describe("SearchOrchestrator", () => {
         paths: ["/contact", "/about", "/team"],
       }),
     );
-    expect(deps.companyExtraction.extract).toHaveBeenCalledTimes(2);
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paths: ["/leadership", "/people", "/management"],
+      }),
+    );
+    expect(deps.companyExtraction.extract).toHaveBeenCalledTimes(3);
     expect(deps.companyRepository.saveProfile).toHaveBeenCalledOnce();
   });
 
@@ -623,13 +635,13 @@ describe("SearchOrchestrator", () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.value.summary.crawled).toBe(4);
-      expect(result.value.summary.extracted).toBe(4);
+      expect(result.value.summary.crawled).toBe(8);
+      expect(result.value.summary.extracted).toBe(8);
       expect(result.value.summary.enriched).toBe(4);
       expect(maxActiveCrawls).toBe(3);
     }
 
-    expect(deps.websiteCrawler.crawl).toHaveBeenCalledTimes(4);
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledTimes(8);
   });
 
   it("enriches multiple companies in parallel", async () => {
@@ -700,6 +712,8 @@ describe("SearchOrchestrator", () => {
           city: "helsinki",
           country: "finland",
           decisionMaker: "Jane Doe, CEO",
+          decisionMakerEmail: "jane@acme.fi",
+          decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
           linkedInUrl: "https://linkedin.com/company/acme",
           email: "info@acme.fi",
         },

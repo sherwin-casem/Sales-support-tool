@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { CrawlPathResolverService } from "@/services/domain/crawler/crawl-path-resolver.service.js";
-import { CONTACT_CRAWL_PATHS, CRAWL_PATHS } from "@/types/crawler/crawler.types.js";
+import {
+  CONTACT_CRAWL_PATHS,
+  CRAWL_PATHS,
+  EXTENDED_TEAM_CRAWL_PATHS,
+} from "@/types/crawler/crawler.types.js";
 import { CrawlError } from "@/types/crawler/crawler-error.types.js";
 
 describe("CrawlPathResolverService", () => {
@@ -21,6 +25,14 @@ describe("CrawlPathResolverService", () => {
     expect(targets.map((target) => target.path)).toEqual([...CONTACT_CRAWL_PATHS]);
     expect(targets[0]?.url).toBe("https://acme.fi/contact");
     expect(targets[2]?.url).toBe("https://acme.fi/team");
+  });
+
+  it("resolves extended team crawl paths for second-pass personal contact discovery", () => {
+    const targets = resolver.resolve("https://acme.fi", "acme.fi", EXTENDED_TEAM_CRAWL_PATHS);
+
+    expect(targets.map((target) => target.path)).toEqual([...EXTENDED_TEAM_CRAWL_PATHS]);
+    expect(targets[0]?.url).toBe("https://acme.fi/leadership");
+    expect(targets[2]?.url).toBe("https://acme.fi/management");
   });
 
   it("blocks mismatched domain hosts", () => {

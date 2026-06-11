@@ -19,10 +19,15 @@ import type { LlmReadyContent } from "@/types/content/text-cleaning.types.js";
 import {
   CONTACT_CRAWL_PATHS,
   CRAWL_PATHS,
+  EXTENDED_TEAM_CRAWL_PATHS,
   type CrawlPath,
 } from "@/types/crawler/crawler.types.js";
 import type { CrawlCompanyResult } from "@/types/crawler/crawler.types.js";
 import { createDiscoveryStubProfile } from "@/services/domain/enrichment/discovery-stub-profile.service.js";
+import {
+  enrichProfileWithDecisionMakerContacts,
+  sanitizeDecisionMakerContacts,
+} from "@/services/domain/enrichment/decision-maker-contact.service.js";
 import { hasOutreachContactGaps } from "@/services/domain/enrichment/outreach-gaps.service.js";
 import { mergeExtractedProfiles } from "@/services/domain/enrichment/profile-merge.service.js";
 import type { SearchResultRecord } from "@/types/repositories/search.repository.types.js";
@@ -468,26 +473,40 @@ export class SearchOrchestrator {
     meta: SavedProfileMeta,
     priorCounts: { crawled: number; extracted: number },
   ): Promise<StageOutcome> {
-    let currentProfile = profile;
+    let currentProfile = sanitizeDecisionMakerContacts(profile);
     let crawled = priorCounts.crawled;
     let extracted = priorCounts.extracted;
 
-    if (hasOutreachContactGaps(currentProfile)) {
-      const contactOutcome = await this.supplementProfileFromContactPages(
-        searchResult.id,
+    const contactPasses: readonly (readonly CrawlPath[])[] = [
+      CONTACT_CRAWL_PATHS,
+      EXTENDED_TEAM_CRAWL_PATHS,
+    ];
+
+    for (const paths of contactPasses) {
+      if (!hasOutreachContactGaps(currentProfile)) {
+        break;
+      }
+
+      const contactOutcome = await this.crawlAndExtractProfile({
+        searchResultId: searchResult.id,
         companyId,
         website,
         normalizedDomain,
-        currentProfile,
-      );
+        paths,
+        mergeWith: currentProfile,
+        logContext: "contact_supplement",
+        nonFatalCrawlFailure: true,
+      });
 
       if (contactOutcome.profile) {
-        currentProfile = contactOutcome.profile;
+        currentProfile = sanitizeDecisionMakerContacts(contactOutcome.profile);
       }
 
       crawled += contactOutcome.crawled;
       extracted += contactOutcome.extracted;
     }
+
+    currentProfile = sanitizeDecisionMakerContacts(currentProfile);
 
     const completeness = computeExtractionCompleteness(currentProfile);
 
@@ -526,25 +545,6 @@ export class SearchOrchestrator {
       paths: CRAWL_PATHS,
       mergeWith: stubProfile,
       logContext: "crawl_fallback",
-    });
-  }
-
-  private async supplementProfileFromContactPages(
-    searchResultId: string,
-    companyId: string,
-    website: string,
-    normalizedDomain: string,
-    webProfile: ExtractedCompany,
-  ): Promise<CrawlExtractOutcome> {
-    return this.crawlAndExtractProfile({
-      searchResultId,
-      companyId,
-      website,
-      normalizedDomain,
-      paths: CONTACT_CRAWL_PATHS,
-      mergeWith: webProfile,
-      logContext: "contact_supplement",
-      nonFatalCrawlFailure: true,
     });
   }
 
@@ -587,9 +587,16 @@ export class SearchOrchestrator {
 
     await this.deps.companyRepository.markCrawled(input.companyId);
 
+    const htmlPages = this.collectCrawlHtml(crawlResult.value);
     const llmContent = this.buildLlmContent(crawlResult.value);
 
     if (llmContent.length < 100) {
+      const hintedProfile = this.applyHtmlContactHints(input.mergeWith, htmlPages);
+
+      if (hintedProfile) {
+        return { profile: hintedProfile, crawled: 1, extracted: 0 };
+      }
+
       logger.info("SearchOrchestrator crawl produced insufficient content for extraction", {
         searchResultId: input.searchResultId,
         companyId: input.companyId,
@@ -619,6 +626,12 @@ export class SearchOrchestrator {
     );
 
     if (!extractionResult.ok) {
+      const hintedProfile = this.applyHtmlContactHints(input.mergeWith, htmlPages);
+
+      if (hintedProfile) {
+        return { profile: hintedProfile, crawled: 1, extracted: 0 };
+      }
+
       if (!input.nonFatalCrawlFailure) {
         logger.info("SearchOrchestrator crawl extraction failed", {
           searchResultId: input.searchResultId,
@@ -631,9 +644,12 @@ export class SearchOrchestrator {
       return { crawled: 1, extracted: 0 };
     }
 
-    const profile = input.mergeWith
+    let profile = input.mergeWith
       ? mergeExtractedProfiles(extractionResult.value.profile, input.mergeWith)
       : extractionResult.value.profile;
+
+    profile = enrichProfileWithDecisionMakerContacts(profile, htmlPages);
+    profile = sanitizeDecisionMakerContacts(profile);
 
     return {
       profile,
@@ -645,6 +661,25 @@ export class SearchOrchestrator {
         extractedAt: extractionResult.value.meta.extractedAt,
       },
     };
+  }
+
+  private collectCrawlHtml(crawlResult: CrawlCompanyResult): string[] {
+    return crawlResult.pages
+      .filter((page) => page.html && !page.error)
+      .map((page) => page.html);
+  }
+
+  private applyHtmlContactHints(
+    profile: ExtractedCompany | undefined,
+    htmlPages: string[],
+  ): ExtractedCompany | undefined {
+    if (!profile || htmlPages.length === 0) {
+      return undefined;
+    }
+
+    return sanitizeDecisionMakerContacts(
+      enrichProfileWithDecisionMakerContacts(profile, htmlPages),
+    );
   }
 
   private async persistEnrichedLead(

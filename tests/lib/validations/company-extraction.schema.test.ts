@@ -49,7 +49,11 @@ describe("ExtractedCompanySchema", () => {
     if (result.success) {
       expect(result.data.city).toBe("unknown");
       expect(result.data.decisionMaker).toBe("unknown");
+      expect(result.data.decisionMakerEmail).toBeNull();
+      expect(result.data.decisionMakerPhone).toBeNull();
+      expect(result.data.decisionMakerLinkedInUrl).toBeNull();
       expect(result.data.linkedInUrl).toBeNull();
+      expect(result.data.phone).toBeNull();
       expect(result.data.revenue).toBe("unknown");
     }
   });
@@ -94,9 +98,13 @@ describe("computeExtractionCompleteness", () => {
       city: "helsinki",
       country: "finland",
       decisionMaker: "Jane Doe, CEO",
+      decisionMakerEmail: "jane@acme.fi",
+      decisionMakerPhone: "+358 9 123 4567",
+      decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
       linkedInUrl: "https://linkedin.com/company/acme",
       xUrl: null,
       email: "info@acme.fi",
+      phone: "+358 9 765 4321",
       revenue: "10M-50M EUR",
     });
 
@@ -111,9 +119,13 @@ describe("computeExtractionCompleteness", () => {
       city: "unknown",
       country: "unknown",
       decisionMaker: "unknown",
+      decisionMakerEmail: null,
+      decisionMakerPhone: null,
+      decisionMakerLinkedInUrl: null,
       linkedInUrl: null,
       xUrl: null,
       email: null,
+      phone: null,
       revenue: "unknown",
     });
 

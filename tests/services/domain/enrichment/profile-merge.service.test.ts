@@ -16,9 +16,13 @@ const websiteProfile: ExtractedCompany = {
   city: "unknown",
   country: "unknown",
   decisionMaker: "unknown",
+  decisionMakerEmail: null,
+  decisionMakerPhone: null,
+  decisionMakerLinkedInUrl: null,
   linkedInUrl: null,
   xUrl: null,
   email: null,
+  phone: null,
   revenue: "unknown",
 };
 
@@ -33,9 +37,13 @@ const webProfile: ExtractedCompany = {
   city: "Helsinki",
   country: "Finland",
   decisionMaker: "Jane Doe, CEO",
+  decisionMakerEmail: "jane@acme.fi",
+  decisionMakerPhone: "+358 9 123 4567",
+  decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
   linkedInUrl: "https://linkedin.com/company/acme",
   xUrl: null,
   email: "info@acme.fi",
+  phone: "+358 9 765 4321",
   revenue: "10M-50M EUR",
 };
 

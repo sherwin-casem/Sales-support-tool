@@ -1,14 +1,7 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
+import { hasDecisionMakerPersonalContactGaps } from "@/services/domain/enrichment/decision-maker-contact.service.js";
 
-function isUnknown(value: string): boolean {
-  return !value.trim() || value.trim().toLowerCase() === "unknown";
-}
-
-/** True when outreach-critical contact fields are still missing after web enrichment. */
+/** True when decision maker name or personal contact fields are still missing. */
 export function hasOutreachContactGaps(profile: ExtractedCompany): boolean {
-  return (
-    isUnknown(profile.decisionMaker) ||
-    !profile.email?.trim() ||
-    !profile.linkedInUrl?.trim()
-  );
+  return hasDecisionMakerPersonalContactGaps(profile);
 }

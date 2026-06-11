@@ -3,25 +3,42 @@ import { hasOutreachContactGaps } from "@/services/domain/enrichment/outreach-ga
 import { createExtractedCompanyProfile } from "../../../helpers/extracted-company.fixture.js";
 
 describe("outreach-gaps.service", () => {
-  it("detects missing outreach contact fields", () => {
+  it("detects missing decision maker and personal contact fields", () => {
     expect(
       hasOutreachContactGaps(
         createExtractedCompanyProfile({
           decisionMaker: "unknown",
-          email: null,
-          linkedInUrl: null,
+          decisionMakerEmail: null,
+          decisionMakerPhone: null,
+          decisionMakerLinkedInUrl: null,
         }),
       ),
     ).toBe(true);
   });
 
-  it("returns false when decision maker, email, and linkedin are present", () => {
+  it("treats company-only contacts as gaps when personal fields are missing", () => {
     expect(
       hasOutreachContactGaps(
         createExtractedCompanyProfile({
           decisionMaker: "Jane Doe, CEO",
           email: "info@acme.fi",
           linkedInUrl: "https://linkedin.com/company/acme",
+          decisionMakerEmail: null,
+          decisionMakerPhone: null,
+          decisionMakerLinkedInUrl: null,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when at least one personal contact field is present", () => {
+    expect(
+      hasOutreachContactGaps(
+        createExtractedCompanyProfile({
+          decisionMaker: "Jane Doe, CEO",
+          decisionMakerEmail: "jane@acme.fi",
+          decisionMakerPhone: null,
+          decisionMakerLinkedInUrl: null,
         }),
       ),
     ).toBe(false);
