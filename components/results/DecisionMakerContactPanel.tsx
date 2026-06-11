@@ -1,7 +1,7 @@
 "use client";
 
 import type { DecisionMakerContact } from "@/lib/results/decision-maker-contact";
-import { displayValue } from "@/lib/results/display-fields";
+import { displayValue, hasDisplayValue } from "@/lib/results/display-fields";
 import { normalizePhoneHref } from "@/lib/results/profile-contacts";
 
 interface DecisionMakerContactPanelProps {
@@ -33,17 +33,28 @@ export function DecisionMakerContactPanel({
       <p className="text-base font-medium text-slate-900">{contact.name}</p>
 
       <dl className="mt-3 space-y-3">
-        <ContactDetail
-          label="Email"
-          value={contact.email}
-          href={contact.email ? `mailto:${contact.email}` : null}
-        />
-        <ContactDetail
-          label="Phone"
-          value={contact.phone}
-          href={contact.phone ? `tel:${normalizePhoneHref(contact.phone)}` : null}
-        />
-        <ContactDetail label="LinkedIn" value={contact.linkedInUrl} href={contact.linkedInUrl} external />
+        {contact.email ? (
+          <ContactDetail
+            label="Email"
+            value={contact.email}
+            href={`mailto:${contact.email}`}
+          />
+        ) : null}
+        {contact.phone ? (
+          <ContactDetail
+            label="Phone"
+            value={contact.phone}
+            href={`tel:${normalizePhoneHref(contact.phone)}`}
+          />
+        ) : null}
+        {hasDisplayValue(contact.linkedInUrl) ? (
+          <ContactDetail
+            label="LinkedIn"
+            value={contact.linkedInUrl}
+            href={contact.linkedInUrl}
+            external
+          />
+        ) : null}
       </dl>
     </section>
   );
@@ -60,6 +71,10 @@ function ContactDetail({
   href: string | null;
   external?: boolean;
 }) {
+  if (!hasDisplayValue(value) && !href) {
+    return null;
+  }
+
   const display = displayValue(value ?? undefined);
 
   return (

@@ -10,6 +10,7 @@ import {
   displayValue,
   formatLocation,
   getCompanyDisplayName,
+  hasDisplayValue,
 } from "@/lib/results/display-fields";
 import {
   hasDecisionMakerContactDetails,
@@ -49,10 +50,6 @@ export function CompanyDetailDrawer({
   const decisionMakerContact = resolveDecisionMakerContact(profile);
   const companyPhone = resolveDisplayPhone(profile?.phone ?? null);
   const companyEmail = resolveDisplayEmail(profile?.email ?? null);
-
-  // #region agent log
-  fetch('http://127.0.0.1:7506/ingest/b8df404c-d358-471e-b660-9eb937c3e500',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0dd8cc'},body:JSON.stringify({sessionId:'0dd8cc',location:'CompanyDetailDrawer.tsx',message:'company contact resolved',data:{emailChanged:Boolean(profile?.email?.trim())&&companyEmail===null,phoneChanged:Boolean(profile?.phone?.trim())&&companyPhone===null},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   const drawerTitle =
     focusSection === "decisionMaker"
       ? (decisionMakerContact?.name ?? "Decision maker")
@@ -129,6 +126,12 @@ function CompanyOverviewContent({
   companyEmail: string | null;
   searchCriteria: ParsedQuery | null;
 }) {
+  const hasCompanyContact =
+    Boolean(companyEmail) ||
+    Boolean(companyPhone) ||
+    hasDisplayValue(profile?.linkedInUrl) ||
+    hasDisplayValue(profile?.xUrl);
+
   return (
     <div className="space-y-6">
       {result.company.websiteUrl ? (
@@ -169,21 +172,35 @@ function CompanyOverviewContent({
             emptyLabel="No target customers identified"
           />
 
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Company contact
-            </h3>
-            <dl className="space-y-3">
-              <ContactItem label="Email" href={companyEmail ? `mailto:${companyEmail}` : null} text={companyEmail} />
-              <ContactItem
-                label="Phone"
-                href={companyPhone ? `tel:${normalizePhoneHref(companyPhone)}` : null}
-                text={companyPhone}
-              />
-              <ContactItem label="LinkedIn" href={profile.linkedInUrl} />
-              <ContactItem label="X" href={profile.xUrl} />
-            </dl>
-          </section>
+          {hasCompanyContact ? (
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Company contact
+              </h3>
+              <dl className="space-y-3">
+                {companyEmail ? (
+                  <ContactItem
+                    label="Email"
+                    href={`mailto:${companyEmail}`}
+                    text={companyEmail}
+                  />
+                ) : null}
+                {companyPhone ? (
+                  <ContactItem
+                    label="Phone"
+                    href={`tel:${normalizePhoneHref(companyPhone)}`}
+                    text={companyPhone}
+                  />
+                ) : null}
+                {hasDisplayValue(profile.linkedInUrl) ? (
+                  <ContactItem label="LinkedIn" href={profile.linkedInUrl} />
+                ) : null}
+                {hasDisplayValue(profile.xUrl) ? (
+                  <ContactItem label="X" href={profile.xUrl} />
+                ) : null}
+              </dl>
+            </section>
+          ) : null}
         </>
       ) : (
         <section className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
@@ -216,6 +233,10 @@ function ContactItem({
   text?: string | null;
 }) {
   const display = text ?? href;
+
+  if (!href && !hasDisplayValue(display)) {
+    return null;
+  }
 
   return (
     <div>

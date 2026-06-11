@@ -4,6 +4,7 @@ import {
   formatLocation,
   formatWebsiteLabel,
   getCompanyDisplayName,
+  hasDisplayValue,
 } from "@/lib/results/display-fields";
 
 describe("display-fields", () => {
@@ -31,6 +32,8 @@ describe("display-fields", () => {
   it("formats empty values as em dash", () => {
     expect(displayValue(null)).toBe("—");
     expect(displayValue("unknown")).toBe("—");
+    expect(hasDisplayValue(null)).toBe(false);
+    expect(hasDisplayValue("info@acme.fi")).toBe(true);
   });
 
   it("formats location from profile city and country", () => {

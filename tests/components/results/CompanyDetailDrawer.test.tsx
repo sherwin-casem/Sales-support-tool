@@ -103,6 +103,57 @@ describe("CompanyDetailDrawer", () => {
 
     expect(html).toContain("No personal email, phone, or LinkedIn was found for this decision maker.");
     expect(html).not.toContain("Company contact");
+    expect(html).not.toContain(">Email</dt>");
+    expect(html).not.toContain(">Phone</dt>");
+    expect(html).not.toContain(">LinkedIn</dt>");
+  });
+
+  it("hides empty company contact rows when only email is available", () => {
+    const html = renderDrawer(
+      createSearchResult({
+        email: "info@acme.fi",
+        phone: null,
+        linkedInUrl: null,
+        xUrl: null,
+      }),
+      "overview",
+    );
+
+    expect(html).toContain("Company contact");
+    expect(html).toContain("info@acme.fi");
+    expect(html).not.toContain(">Phone</dt>");
+    expect(html).not.toContain(">LinkedIn</dt>");
+    expect(html).not.toContain(">X</dt>");
+  });
+
+  it("hides the company contact section when all contact fields are empty", () => {
+    const html = renderDrawer(
+      createSearchResult({
+        email: null,
+        phone: null,
+        linkedInUrl: null,
+        xUrl: null,
+      }),
+      "overview",
+    );
+
+    expect(html).not.toContain("Company contact");
+  });
+
+  it("hides empty decision maker contact rows when only email is available", () => {
+    const html = renderDrawer(
+      createSearchResult({
+        decisionMakerEmail: "jane@acme.fi",
+        decisionMakerPhone: null,
+        decisionMakerLinkedInUrl: null,
+      }),
+      "decisionMaker",
+    );
+
+    expect(html).toContain("jane@acme.fi");
+    expect(html).not.toContain(">Phone</dt>");
+    expect(html).not.toContain(">LinkedIn</dt>");
+    expect(html).not.toContain("+358 9 111 2222");
   });
 
   it("shows an empty technology state when no products are extracted", () => {
