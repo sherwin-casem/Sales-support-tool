@@ -2,6 +2,7 @@
 
 import type { DecisionMakerContact } from "@/lib/results/decision-maker-contact";
 import { displayValue } from "@/lib/results/display-fields";
+import { normalizePhoneHref } from "@/lib/results/profile-contacts";
 
 interface DecisionMakerContactPanelProps {
   contact: DecisionMakerContact;
@@ -80,8 +81,4 @@ function ContactDetail({
       </dd>
     </div>
   );
-}
-
-function normalizePhoneHref(phone: string): string {
-  return phone.replace(/[^\d+]/g, "");
 }
