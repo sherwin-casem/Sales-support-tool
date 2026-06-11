@@ -12,6 +12,7 @@ describe("pipeline.config", () => {
     expect(config.SEARCH_EXTRACTION_CONCURRENCY).toBe(3);
     expect(config.SEARCH_ENRICHMENT_CONCURRENCY).toBe(3);
     expect(config.DISCOVERY_UNLIMITED_MAX_ROUNDS).toBe(5);
+    expect(config.SEARCH_MIN_PROFILE_COMPLETENESS).toBe(0.35);
   });
 
   it("reads overrides from environment", () => {
