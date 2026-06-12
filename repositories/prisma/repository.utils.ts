@@ -1,3 +1,4 @@
+import { Prisma, type CompanyProfile } from "@prisma/client";
 import type { DbClient } from "@/lib/db/db-client.types.js";
 import type {
   SaveCompanyProfileInput,
@@ -55,6 +56,26 @@ export function dedupeCompanyUpsertInputs(
   }
 
   return Array.from(byDomain.values());
+}
+
+/**
+ * Fetches only the highest-version profile per company via DISTINCT ON,
+ * instead of transferring every profile version and deduplicating in JS.
+ */
+export async function findLatestProfilesByCompanyIds(
+  client: DbClient,
+  companyIds: string[],
+): Promise<CompanyProfile[]> {
+  if (companyIds.length === 0) {
+    return [];
+  }
+
+  return client.$queryRaw<CompanyProfile[]>(Prisma.sql`
+    SELECT DISTINCT ON ("companyId") *
+    FROM "company_profiles"
+    WHERE "companyId" = ANY(${companyIds}::uuid[])
+    ORDER BY "companyId", "version" DESC
+  `);
 }
 
 export async function findExistingProfileByContentHash(

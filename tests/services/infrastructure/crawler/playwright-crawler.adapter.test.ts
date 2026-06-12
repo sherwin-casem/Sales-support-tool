@@ -74,6 +74,8 @@ describe("PlaywrightCrawlerAdapter", () => {
     expect(result.pagesSucceeded).toBe(5);
     expect(result.pages[0]?.path).toBe("/");
     expect(result.pages[4]?.path).toBe("/careers");
+    expect(pool.withContext).toHaveBeenCalledTimes(1);
+    expect(context.newPage).toHaveBeenCalledTimes(5);
   });
 
   it("returns partial status when some pages fail", async () => {

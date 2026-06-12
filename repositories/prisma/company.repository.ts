@@ -13,6 +13,7 @@ import {
   assertValidProfileInput,
   dedupeCompanyUpsertInputs,
   findExistingProfileByContentHash,
+  findLatestProfilesByCompanyIds,
   getNextProfileVersion,
   normalizeCompanyUpsertInput,
 } from "@/repositories/prisma/repository.utils.js";
@@ -89,31 +90,66 @@ export class PrismaCompanyRepository implements CompanyRepository {
     const deduped = dedupeCompanyUpsertInputs(inputs);
 
     const execute = async (client: DbClient): Promise<UpsertCompaniesResult> => {
-      const companies: CompanyRecord[] = [];
-      let createdCount = 0;
+      if (deduped.length === 0) {
+        return { companies: [], createdCount: 0, updatedCount: 0 };
+      }
+
+      const domains = deduped.map((input) => input.normalizedDomain);
+      const existing = await client.company.findMany({
+        where: { normalizedDomain: { in: domains } },
+      });
+      const existingByDomain = new Map(
+        existing.map((company) => [company.normalizedDomain, company]),
+      );
+
+      const toCreate = deduped.filter(
+        (input) => !existingByDomain.has(input.normalizedDomain),
+      );
+
+      if (toCreate.length > 0) {
+        await client.company.createMany({
+          data: toCreate.map((input) => ({
+            domain: input.domain,
+            normalizedDomain: input.normalizedDomain,
+            name: input.name,
+            websiteUrl: input.websiteUrl,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
       let updatedCount = 0;
 
-      for (const normalized of deduped) {
-        const result = await this.upsertByDomain(
-          {
-            website: normalized.websiteUrl,
-            name: normalized.name,
-          },
-          client,
-        );
+      for (const input of deduped) {
+        const current = existingByDomain.get(input.normalizedDomain);
 
-        companies.push(result.company);
+        if (!current) {
+          continue;
+        }
 
-        if (result.created) {
-          createdCount += 1;
-        } else {
-          updatedCount += 1;
+        updatedCount += 1;
+        const nextName = input.name ?? current.name;
+
+        if (nextName !== current.name || input.websiteUrl !== current.websiteUrl) {
+          await client.company.update({
+            where: { id: current.id },
+            data: { name: nextName, websiteUrl: input.websiteUrl },
+          });
         }
       }
 
+      const records = await client.company.findMany({
+        where: { normalizedDomain: { in: domains } },
+      });
+      const recordByDomain = new Map(
+        records.map((record) => [record.normalizedDomain, mapCompany(record)]),
+      );
+
       return {
-        companies,
-        createdCount,
+        companies: deduped
+          .map((input) => recordByDomain.get(input.normalizedDomain))
+          .filter((company): company is CompanyRecord => Boolean(company)),
+        createdCount: toCreate.length,
         updatedCount,
       };
     };
@@ -287,20 +323,11 @@ export class PrismaCompanyRepository implements CompanyRepository {
     ]);
 
     const pageCompanyIds = companies.map((company) => company.id);
-    const profiles = pageCompanyIds.length
-      ? await client.companyProfile.findMany({
-          where: { companyId: { in: pageCompanyIds } },
-          orderBy: [{ companyId: "asc" }, { version: "desc" }],
-        })
-      : [];
+    const profiles = await findLatestProfilesByCompanyIds(client, pageCompanyIds);
 
-    const latestProfileByCompany = new Map<string, CompanyProfileRecord>();
-
-    for (const profile of profiles) {
-      if (!latestProfileByCompany.has(profile.companyId)) {
-        latestProfileByCompany.set(profile.companyId, mapCompanyProfile(profile));
-      }
-    }
+    const latestProfileByCompany = new Map<string, CompanyProfileRecord>(
+      profiles.map((profile) => [profile.companyId, mapCompanyProfile(profile)]),
+    );
 
     return {
       totalItems,
@@ -335,43 +362,52 @@ export class PrismaCompanyRepository implements CompanyRepository {
         companyId,
         searchJob: { userId },
       },
+      select: { id: true },
     });
 
     if (!access) {
       return null;
     }
 
-    const company = await client.company.findUnique({ where: { id: companyId } });
+    const [company, latestProfile, profileHistory, recentSearches] = await Promise.all([
+      client.company.findUnique({ where: { id: companyId } }),
+      client.companyProfile.findFirst({
+        where: { companyId },
+        orderBy: { version: "desc" },
+      }),
+      client.companyProfile.findMany({
+        where: { companyId },
+        orderBy: { version: "desc" },
+        select: {
+          version: true,
+          completeness: true,
+          extractedAt: true,
+          contentHash: true,
+        },
+      }),
+      client.searchResult.findMany({
+        where: {
+          companyId,
+          searchJob: { userId },
+        },
+        include: {
+          searchJob: { select: { query: true } },
+        },
+        orderBy: { discoveredAt: "desc" },
+        take: 10,
+      }),
+    ]);
 
     if (!company) {
       return null;
     }
 
-    const profiles = await client.companyProfile.findMany({
-      where: { companyId },
-      orderBy: { version: "desc" },
-    });
-
-    const recentSearches = await client.searchResult.findMany({
-      where: {
-        companyId,
-        searchJob: { userId },
-      },
-      include: {
-        searchJob: true,
-      },
-      orderBy: { discoveredAt: "desc" },
-      take: 10,
-    });
-
-    const mappedProfiles = profiles.map(mapCompanyProfile);
-
     return {
       ...mapCompany(company),
-      profile: mappedProfiles[0] ?? null,
-      profileHistory: mappedProfiles.map((profile) => ({
+      profile: latestProfile ? mapCompanyProfile(latestProfile) : null,
+      profileHistory: profileHistory.map((profile) => ({
         version: profile.version,
-        completeness: profile.completeness,
+        completeness: profile.completeness?.toNumber() ?? null,
         extractedAt: profile.extractedAt,
         contentHash: profile.contentHash,
       })),

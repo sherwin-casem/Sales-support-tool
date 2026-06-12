@@ -19,28 +19,25 @@ import {
 const SYSTEM_PROMPT_PATH = "extraction/company-profile.system.md";
 const USER_PROMPT_PATH = "extraction/company-profile.user.md";
 const SCHEMA_NAME = "extracted_company";
-const MAX_ATTEMPTS = 2;
 
 export interface CompanyExtractionAgentOptions {
   model: string;
   promptLoader?: PromptLoader;
-  maxAttempts?: number;
 }
 
 export class CompanyExtractionAgent
   implements Agent<CompanyExtractionInput, ExtractedCompany>
 {
   private readonly promptLoader: PromptLoader;
-  private readonly maxAttempts: number;
 
   constructor(
     private readonly openai: OpenAIClientPort,
     private readonly options: CompanyExtractionAgentOptions,
   ) {
     this.promptLoader = options.promptLoader ?? new PromptLoader();
-    this.maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
   }
 
+  // Single attempt by design: retries live at the service layer only.
   async execute(
     input: CompanyExtractionInput,
   ): Promise<Result<ExtractedCompany, AgentError>> {
@@ -56,36 +53,13 @@ export class CompanyExtractionAgent
       );
     }
 
-    let lastValidationError: AgentError | undefined;
+    const completionResult = await this.requestCompletion(parsedInput.data);
 
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
-      const completionResult = await this.requestCompletion(parsedInput.data);
-
-      if (!completionResult.ok) {
-        if (attempt === this.maxAttempts) {
-          return completionResult;
-        }
-
-        continue;
-      }
-
-      const validated = this.validateOutput(completionResult.value);
-
-      if (validated.ok) {
-        return validated;
-      }
-
-      lastValidationError = validated.error;
-
-      if (attempt === this.maxAttempts) {
-        return err(validated.error);
-      }
+    if (!completionResult.ok) {
+      return completionResult;
     }
 
-    return err(
-      lastValidationError ??
-        new AgentError("VALIDATION_ERROR", "Failed to extract company profile"),
-    );
+    return this.validateOutput(completionResult.value);
   }
 
   private async requestCompletion(

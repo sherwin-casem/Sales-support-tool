@@ -7,7 +7,6 @@ import {
   createMockPrismaClient,
   createMockSearchJob,
   createMockSearchResult,
-  createUniqueConstraintError,
   toCompanyRecord,
 } from "./test-helpers.js";
 
@@ -44,9 +43,10 @@ describe("PrismaSearchRepository", () => {
     const company = toCompanyRecord(createMockCompany());
 
     prisma.searchJob.findUnique.mockResolvedValue({ id: job.id });
-    prisma.searchResult.create
-      .mockResolvedValueOnce(createMockSearchResult())
-      .mockRejectedValueOnce(createUniqueConstraintError());
+    prisma.searchResult.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([createMockSearchResult()]);
+    prisma.searchResult.createMany.mockResolvedValue({ count: 1 });
 
     const companyRepository = createMockCompanyRepository({
       companies: [company],
@@ -71,6 +71,17 @@ describe("PrismaSearchRepository", () => {
     expect(result.companies).toHaveLength(1);
     expect(result.searchResults).toHaveLength(1);
     expect(result.skippedDuplicates).toBe(1);
+    expect(prisma.searchResult.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          searchJobId: job.id,
+          companyId: company.id,
+          stage: "DISCOVERED",
+          rank: 1,
+        }),
+      ],
+      skipDuplicates: true,
+    });
     expect(prisma.$transaction).toHaveBeenCalledOnce();
     expect(companyRepository.upsertManyByDomain).toHaveBeenCalledWith(
       [
@@ -87,9 +98,10 @@ describe("PrismaSearchRepository", () => {
     const company = toCompanyRecord(createMockCompany());
 
     prisma.searchJob.findUnique.mockResolvedValue({ id: job.id });
-    prisma.searchResult.create
-      .mockResolvedValueOnce(createMockSearchResult())
-      .mockRejectedValueOnce(createUniqueConstraintError());
+    prisma.searchResult.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([createMockSearchResult()]);
+    prisma.searchResult.createMany.mockResolvedValue({ count: 1 });
 
     const companyRepository = createMockCompanyRepository({
       companies: [company],
@@ -111,7 +123,12 @@ describe("PrismaSearchRepository", () => {
 
     expect(result.searchResults).toHaveLength(1);
     expect(result.skippedDuplicates).toBe(1);
-    expect(prisma.searchResult.create).toHaveBeenCalledTimes(2);
+    expect(prisma.searchResult.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.searchResult.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ companyId: company.id })],
+      }),
+    );
   });
 
   it("throws when search job does not exist", async () => {

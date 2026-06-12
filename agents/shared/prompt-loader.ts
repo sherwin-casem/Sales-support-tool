@@ -3,11 +3,24 @@ import path from "node:path";
 import { escapePromptLiteral } from "@/lib/security/prompt-safety.js";
 
 export class PromptLoader {
+  // Prompt files are static at runtime, so cache them after the first read.
+  private readonly cache = new Map<string, string>();
+
   constructor(private readonly promptsRoot = path.join(process.cwd(), "prompts")) {}
 
   async load(relativePath: string): Promise<string> {
+    const cached = this.cache.get(relativePath);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
     const filePath = path.join(this.promptsRoot, relativePath);
-    return readFile(filePath, "utf8");
+    const content = await readFile(filePath, "utf8");
+
+    this.cache.set(relativePath, content);
+
+    return content;
   }
 
   async loadTemplate(

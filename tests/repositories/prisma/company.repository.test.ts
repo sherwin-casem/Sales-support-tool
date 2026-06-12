@@ -35,8 +35,10 @@ describe("PrismaCompanyRepository", () => {
     const prisma = createMockPrismaClient();
     const company = createMockCompany();
 
-    prisma.company.findUnique.mockResolvedValue(null);
-    prisma.company.upsert.mockResolvedValue(company);
+    prisma.company.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([company]);
+    prisma.company.createMany.mockResolvedValue({ count: 1 });
 
     const repository = new PrismaCompanyRepository(prisma);
     const result = await repository.upsertManyByDomain([
@@ -46,8 +48,36 @@ describe("PrismaCompanyRepository", () => {
 
     expect(result.companies).toHaveLength(1);
     expect(result.createdCount).toBe(1);
+    expect(result.updatedCount).toBe(0);
     expect(prisma.$transaction).toHaveBeenCalledOnce();
-    expect(prisma.company.upsert).toHaveBeenCalledOnce();
+    expect(prisma.company.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          normalizedDomain: "acme.fi",
+          name: "Acme Logistics Oy",
+        }),
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it("updates existing companies only when fields changed", async () => {
+    const prisma = createMockPrismaClient();
+    const company = createMockCompany();
+
+    prisma.company.findMany
+      .mockResolvedValueOnce([company])
+      .mockResolvedValueOnce([company]);
+
+    const repository = new PrismaCompanyRepository(prisma);
+    const result = await repository.upsertManyByDomain([
+      { website: "https://acme.fi", name: "Acme Logistics Oy" },
+    ]);
+
+    expect(result.createdCount).toBe(0);
+    expect(result.updatedCount).toBe(1);
+    expect(prisma.company.createMany).not.toHaveBeenCalled();
+    expect(prisma.company.update).not.toHaveBeenCalled();
   });
 
   it("skips duplicate profile versions when content hash already exists", async () => {

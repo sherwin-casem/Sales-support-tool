@@ -70,14 +70,14 @@ export class SearchApiService {
       throw ApiError.notFound(`Search job not found: ${searchJobId}`);
     }
 
-    const [rankedResults, rawResults] = await Promise.all([
+    const [rankedResults, stageCounts] = await Promise.all([
       this.deps.leadRepository.findResultsWithDetailsForJob(searchJobId, {
         stage: query.stage,
       }),
-      this.deps.searchRepository.findResultsByJobId(searchJobId),
+      this.deps.searchRepository.countResultsByStage(searchJobId),
     ]);
 
-    return mapGetSearchResponse(job, rankedResults, rawResults, {
+    return mapGetSearchResponse(job, rankedResults, stageCounts, {
       includeFailures: query.includeFailures,
     });
   }

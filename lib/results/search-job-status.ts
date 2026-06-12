@@ -1,11 +1,13 @@
-import { SearchJobStatus } from "@prisma/client";
+import type { SearchJobStatus } from "@prisma/client";
 
+// String literals (with a type-only Prisma import) keep @prisma/client out of
+// the client bundle; this module is shared by browser components.
 export const ACTIVE_SEARCH_JOB_STATUSES: readonly SearchJobStatus[] = [
-  SearchJobStatus.PENDING,
-  SearchJobStatus.DISCOVERING,
-  SearchJobStatus.CRAWLING,
-  SearchJobStatus.EXTRACTING,
-  SearchJobStatus.ENRICHING,
+  "PENDING",
+  "DISCOVERING",
+  "CRAWLING",
+  "EXTRACTING",
+  "ENRICHING",
 ];
 
 export function isSearchJobActive(status: SearchJobStatus): boolean {

@@ -5,7 +5,6 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { resolveDbClient, type DbClient } from "@/lib/db/db-client.types.js";
-import { isUniqueConstraintError } from "@/lib/db/prisma-errors.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
 import { ACTIVE_SEARCH_JOB_STATUSES } from "@/lib/results/search-job-status.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
@@ -146,8 +145,16 @@ export class PrismaSearchRepository implements SearchRepository {
         upsertResult.companies.map((company) => [company.normalizedDomain, company]),
       );
 
-      const searchResults: SearchResultRecord[] = [];
+      const existingResults = await tx.searchResult.findMany({
+        where: { searchJobId },
+        select: { companyId: true },
+      });
+      const seenCompanyIds = new Set(
+        existingResults.map((result) => result.companyId),
+      );
+
       let skippedDuplicates = 0;
+      const rowsToCreate: Prisma.SearchResultCreateManyInput[] = [];
 
       for (const [index, discovery] of discoveries.entries()) {
         const normalized = domainNormalizerService.normalizeWebsite(discovery.website);
@@ -162,31 +169,47 @@ export class PrismaSearchRepository implements SearchRepository {
           continue;
         }
 
+        if (seenCompanyIds.has(company.id)) {
+          skippedDuplicates += 1;
+          continue;
+        }
+
+        seenCompanyIds.add(company.id);
+        rowsToCreate.push({
+          searchJobId,
+          companyId: company.id,
+          stage: SearchResultStage.DISCOVERED,
+          rank: discovery.rank ?? index + 1,
+          discoverySource: discovery.discoverySource ?? null,
+          discoveryUrl: discovery.discoveryUrl ?? discovery.website,
+        });
+      }
+
+      let searchResults: SearchResultRecord[] = [];
+
+      if (rowsToCreate.length > 0) {
         try {
-          const record = await tx.searchResult.create({
-            data: {
-              searchJobId,
-              companyId: company.id,
-              stage: SearchResultStage.DISCOVERED,
-              rank: discovery.rank ?? index + 1,
-              discoverySource: discovery.discoverySource ?? null,
-              discoveryUrl: discovery.discoveryUrl ?? discovery.website,
-            },
+          await tx.searchResult.createMany({
+            data: rowsToCreate,
+            skipDuplicates: true,
           });
-
-          searchResults.push(mapSearchResult(record));
         } catch (error) {
-          if (isUniqueConstraintError(error)) {
-            skippedDuplicates += 1;
-            continue;
-          }
-
           throw new RepositoryError(
             "DATABASE_ERROR",
-            "Failed to create search result",
+            "Failed to create search results",
             error,
           );
         }
+
+        const created = await tx.searchResult.findMany({
+          where: {
+            searchJobId,
+            companyId: { in: rowsToCreate.map((row) => row.companyId) },
+          },
+          orderBy: [{ rank: "asc" }, { discoveredAt: "asc" }],
+        });
+
+        searchResults = created.map(mapSearchResult);
       }
 
       return {
@@ -212,6 +235,26 @@ export class PrismaSearchRepository implements SearchRepository {
     });
 
     return records.map(mapSearchResult);
+  }
+
+  async countResultsByStage(
+    searchJobId: string,
+    tx?: DbClient,
+  ): Promise<Partial<Record<SearchResultStage, number>>> {
+    const client = resolveDbClient(this.prisma, tx);
+    const groups = await client.searchResult.groupBy({
+      by: ["stage"],
+      where: { searchJobId },
+      _count: { _all: true },
+    });
+
+    const counts: Partial<Record<SearchResultStage, number>> = {};
+
+    for (const group of groups) {
+      counts[group.stage] = group._count._all;
+    }
+
+    return counts;
   }
 
   async updateResultStage(

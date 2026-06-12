@@ -18,7 +18,7 @@ import type {
   SearchSummaryResponse,
 } from "@/types/api/search.api.types.js";
 import type { RankedLeadRecord } from "@/types/repositories/lead.repository.types.js";
-import type { SearchJobRecord, SearchResultRecord } from "@/types/repositories/search.repository.types.js";
+import type { SearchJobRecord } from "@/types/repositories/search.repository.types.js";
 import type {
   CompanyDetailRecord,
   CompanyListItemRecord,
@@ -45,32 +45,38 @@ export function mapCreateSearchResponse(job: SearchJobRecord): CreateSearchRespo
   };
 }
 
-export function buildSearchSummary(
-  results: SearchResultRecord[],
+export type SearchStageCounts = Partial<Record<SearchResultStage, number>>;
+
+export function buildSearchSummaryFromCounts(
+  counts: SearchStageCounts,
   skippedDuplicates = 0,
 ): SearchSummaryResponse {
+  const sumStages = (stages: SearchResultStage[]): number =>
+    stages.reduce((total, stage) => total + (counts[stage] ?? 0), 0);
+
   return {
-    discovered: results.length,
-    crawled: countByStages(results, ["CRAWLED", "EXTRACTING", "EXTRACT_FAILED", "EXTRACTED", "ENRICHING", "ENRICH_FAILED", "ENRICHED"]),
-    extracted: countByStages(results, ["EXTRACTED", "ENRICHING", "ENRICH_FAILED", "ENRICHED"]),
-    enriched: countByStage(results, "ENRICHED"),
-    failed: results.filter((result) => FAILED_STAGES.includes(result.stage)).length,
+    discovered: sumStages(Object.keys(counts) as SearchResultStage[]),
+    crawled: sumStages(["CRAWLED", "EXTRACTING", "EXTRACT_FAILED", "EXTRACTED", "ENRICHING", "ENRICH_FAILED", "ENRICHED"]),
+    extracted: sumStages(["EXTRACTED", "ENRICHING", "ENRICH_FAILED", "ENRICHED"]),
+    enriched: counts.ENRICHED ?? 0,
+    failed: sumStages(FAILED_STAGES),
     skippedDuplicates,
   };
 }
 
 export function mapSearchFailures(
-  results: SearchResultRecord[],
+  results: Array<Pick<RankedLeadRecord, "searchResultId" | "companyId" | "stage" | "stageError">>,
 ): SearchStageFailureResponse[] {
   return results
     .filter(
       (result) =>
-        FAILED_STAGES.includes(result.stage) || Boolean(result.stageError),
+        FAILED_STAGES.includes(result.stage as SearchResultStage) ||
+        Boolean(result.stageError),
     )
     .map((result) => ({
-      searchResultId: result.id,
+      searchResultId: result.searchResultId,
       companyId: result.companyId,
-      stage: result.stage,
+      stage: result.stage as SearchResultStage,
       message: result.stageError ?? `Stage failed: ${result.stage}`,
     }));
 }
@@ -78,27 +84,23 @@ export function mapSearchFailures(
 export function mapGetSearchResponse(
   job: SearchJobRecord,
   rankedResults: RankedLeadRecord[],
-  rawResults: SearchResultRecord[],
+  stageCounts: SearchStageCounts,
   options: { includeFailures: boolean },
 ): GetSearchResponse {
-  const resultById = new Map(rawResults.map((result) => [result.id, result]));
-
   return {
     id: job.id,
     query: job.query,
     status: job.status,
     companyLimit: job.companyLimit,
     criteria: isParsedQuery(job.criteria) ? job.criteria : null,
-    summary: buildSearchSummary(rawResults),
+    summary: buildSearchSummaryFromCounts(stageCounts),
     errorMessage: job.errorMessage,
     startedAt: toIsoString(job.startedAt),
     completedAt: toIsoString(job.completedAt),
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
-    results: rankedResults.map((result) =>
-      mapSearchResultItem(result, resultById.get(result.searchResultId)),
-    ),
-    failures: options.includeFailures ? mapSearchFailures(rawResults) : [],
+    results: rankedResults.map(mapSearchResultItem),
+    failures: options.includeFailures ? mapSearchFailures(rankedResults) : [],
   };
 }
 
@@ -134,17 +136,14 @@ export function mapGetCompanyResponse(detail: CompanyDetailRecord): GetCompanyRe
   };
 }
 
-function mapSearchResultItem(
-  result: RankedLeadRecord,
-  rawResult?: SearchResultRecord,
-): SearchResultItemResponse {
+function mapSearchResultItem(result: RankedLeadRecord): SearchResultItemResponse {
   return {
     searchResultId: result.searchResultId,
     rank: result.rank,
     stage: result.stage as SearchResultStage,
-    stageError: rawResult?.stageError ?? null,
-    discoveredAt: rawResult?.discoveredAt.toISOString() ?? new Date(0).toISOString(),
-    completedAt: toIsoString(rawResult?.completedAt),
+    stageError: result.stageError,
+    discoveredAt: result.discoveredAt.toISOString(),
+    completedAt: toIsoString(result.completedAt),
     company: mapCompanySummary(result.company),
     profile: sanitizeProfileForResponse(result.profile?.structuredData ?? null),
     profileCompleteness: result.profile?.completeness ?? null,
@@ -208,17 +207,6 @@ function mapCompanySearchAppearance(
     rank: appearance.rank,
     searchedAt: appearance.searchedAt.toISOString(),
   };
-}
-
-function countByStage(results: SearchResultRecord[], stage: SearchResultStage): number {
-  return results.filter((result) => result.stage === stage).length;
-}
-
-function countByStages(
-  results: SearchResultRecord[],
-  stages: SearchResultStage[],
-): number {
-  return results.filter((result) => stages.includes(result.stage)).length;
 }
 
 function isParsedQuery(value: ParsedQuery | Record<string, unknown>): value is ParsedQuery {

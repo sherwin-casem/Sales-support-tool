@@ -24,12 +24,10 @@ const USER_PROMPT_PATH = "discovery/company-discovery.user.md";
 const SCHEMA_NAME = "discovered_companies";
 const DISCOVERY_SOURCE = "openai_web_search";
 const DEFAULT_CONFIDENCE = 0.85;
-const MAX_ATTEMPTS = 2;
 
 export interface CompanyDiscoveryAgentOptions {
   model: string;
   promptLoader?: PromptLoader;
-  maxAttempts?: number;
   deduplicator?: typeof companyDeduplicatorService;
   searchContextSize?: "low" | "medium" | "high";
 }
@@ -38,7 +36,6 @@ export class CompanyDiscoveryAgent
   implements Agent<CompanyDiscoveryInput, DiscoveredCompany[], DiscoveryError>
 {
   private readonly promptLoader: PromptLoader;
-  private readonly maxAttempts: number;
   private readonly deduplicator: typeof companyDeduplicatorService;
 
   constructor(
@@ -46,10 +43,10 @@ export class CompanyDiscoveryAgent
     private readonly options: CompanyDiscoveryAgentOptions,
   ) {
     this.promptLoader = options.promptLoader ?? new PromptLoader();
-    this.maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
     this.deduplicator = options.deduplicator ?? companyDeduplicatorService;
   }
 
+  // Single attempt by design: retries live at the service layer only.
   async execute(
     input: CompanyDiscoveryInput,
   ): Promise<Result<DiscoveredCompany[], DiscoveryError>> {
@@ -65,49 +62,29 @@ export class CompanyDiscoveryAgent
       );
     }
 
-    let lastValidationError: DiscoveryError | undefined;
+    const completionResult = await this.requestCompletion(parsedInput.data);
 
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
-      const completionResult = await this.requestCompletion(parsedInput.data);
-
-      if (!completionResult.ok) {
-        if (attempt === this.maxAttempts) {
-          return completionResult;
-        }
-
-        continue;
-      }
-
-      const validated = this.validateOutput(
-        completionResult.value,
-        parsedInput.data.limit,
-      );
-
-      if (validated.ok) {
-        aiLogger.info("CompanyDiscoveryAgent.execute completed", {
-          queryLength: parsedInput.data.query.length,
-          industryHint: parsedInput.data.industry ?? "not specified",
-          locationHint: parsedInput.data.location ?? "not specified",
-          limit: parsedInput.data.limit,
-          resultCount: validated.value.length,
-          attempt,
-          promptVersion: COMPANY_DISCOVERY_PROMPT_VERSION,
-        });
-
-        return validated;
-      }
-
-      lastValidationError = validated.error;
-
-      if (attempt === this.maxAttempts) {
-        return err(validated.error);
-      }
+    if (!completionResult.ok) {
+      return completionResult;
     }
 
-    return err(
-      lastValidationError ??
-        new DiscoveryError("DISCOVERY_FAILED", "Failed to discover companies"),
+    const validated = this.validateOutput(
+      completionResult.value,
+      parsedInput.data.limit,
     );
+
+    if (validated.ok) {
+      aiLogger.info("CompanyDiscoveryAgent.execute completed", {
+        queryLength: parsedInput.data.query.length,
+        industryHint: parsedInput.data.industry ?? "not specified",
+        locationHint: parsedInput.data.location ?? "not specified",
+        limit: parsedInput.data.limit,
+        resultCount: validated.value.length,
+        promptVersion: COMPANY_DISCOVERY_PROMPT_VERSION,
+      });
+    }
+
+    return validated;
   }
 
   private async requestCompletion(

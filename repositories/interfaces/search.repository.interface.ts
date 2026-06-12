@@ -38,6 +38,10 @@ export interface SearchRepository {
     options?: { stage?: SearchResultStage },
     tx?: DbClient,
   ): Promise<SearchResultRecord[]>;
+  countResultsByStage(
+    searchJobId: string,
+    tx?: DbClient,
+  ): Promise<Partial<Record<SearchResultStage, number>>>;
   updateResultStage(
     input: UpdateSearchResultStageInput,
     tx?: DbClient,

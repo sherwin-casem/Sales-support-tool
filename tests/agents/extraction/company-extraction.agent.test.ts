@@ -43,7 +43,6 @@ describe("CompanyExtractionAgent", () => {
     agent = new CompanyExtractionAgent(openai, {
       model: "gpt-4o",
       promptLoader: new PromptLoader(promptsRoot),
-      maxAttempts: 2,
     });
   });
 
@@ -78,30 +77,18 @@ describe("CompanyExtractionAgent", () => {
     expect(createStructuredCompletion.mock.calls[0]?.[0].schemaName).toBe("extracted_company");
   });
 
-  it("retries when OpenAI returns invalid company size", async () => {
-    createStructuredCompletion
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          companyName: "Acme Logistics Oy",
-          description: "Freight and warehousing provider in Finland.",
-          industry: "logistics",
-          products: [],
-          services: ["Freight forwarding"],
-          targetCustomers: [],
-          estimatedCompanySize: "many employees",
-        }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          companyName: "Acme Logistics Oy",
-          description: "Freight and warehousing provider in Finland.",
-          industry: "logistics",
-          products: [],
-          services: ["Freight forwarding"],
-          targetCustomers: [],
-          estimatedCompanySize: "100-200",
-        }),
-      );
+  it("returns validation error for invalid company size without retrying", async () => {
+    createStructuredCompletion.mockResolvedValue(
+      JSON.stringify({
+        companyName: "Acme Logistics Oy",
+        description: "Freight and warehousing provider in Finland.",
+        industry: "logistics",
+        products: [],
+        services: ["Freight forwarding"],
+        targetCustomers: [],
+        estimatedCompanySize: "many employees",
+      }),
+    );
 
     const content = loadFixture("acme-llm-ready.txt");
     const result = await agent.execute({
@@ -110,8 +97,11 @@ describe("CompanyExtractionAgent", () => {
       companyId,
     });
 
-    expect(result.ok).toBe(true);
-    expect(createStructuredCompletion).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+    expect(createStructuredCompletion).toHaveBeenCalledOnce();
   });
 
   it("returns invalid input for short content", async () => {
