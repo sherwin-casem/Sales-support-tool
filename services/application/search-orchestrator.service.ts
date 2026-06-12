@@ -464,7 +464,11 @@ export class SearchOrchestrator {
       );
     }
 
-    await this.persistEnrichedLead(searchResult.id, companyId, currentProfile, meta);
+    await this.persistEnrichedLead(searchResult.id, companyId, currentProfile, meta, {
+      companyName: currentProfile.companyName,
+      domain: normalizedDomain,
+      website,
+    });
 
     return {
       crawled,
@@ -622,6 +626,7 @@ export class SearchOrchestrator {
     companyId: string,
     profile: ExtractedCompany,
     meta: SavedProfileMeta,
+    companyContext?: { companyName: string; domain: string; website: string },
   ): Promise<void> {
     const contentHash = hashEnrichmentProfile(profile);
 
@@ -640,6 +645,25 @@ export class SearchOrchestrator {
       stage: SearchResultStage.ENRICHED,
       completedAt: new Date(),
     });
+
+    if (companyContext) {
+      void import("@/services/application/intent-detection-runner.service.js")
+        .then(({ runIntentDetectionForCompany }) =>
+          runIntentDetectionForCompany({
+            companyId,
+            companyName: companyContext.companyName,
+            domain: companyContext.domain,
+            website: companyContext.website,
+            profile,
+          }),
+        )
+        .catch((error) => {
+          logger.warn("Post-enrich intent detection failed", {
+            companyId,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
+        });
+    }
   }
 
   private buildLlmContent(crawlResult: CrawlCompanyResult): string {

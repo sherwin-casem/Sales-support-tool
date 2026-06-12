@@ -1,12 +1,15 @@
 import { apiLogger } from "@/lib/logging/logger.js";
 import { ApiError } from "@/lib/api/api-error.js";
+import { getAuthenticatedUser } from "@/lib/api/auth.js";
+import { hasPermission, type Permission } from "@/lib/auth/permissions.js";
 import { getClientIp, getRateLimiter } from "@/lib/api/rate-limit.js";
 import { errorResponse, toApiError } from "@/lib/api/http-response.js";
-import { getAuthenticatedUserId } from "@/lib/api/auth.js";
 import { getSecurityConfig } from "@/lib/config/security.config.js";
+import type { AuthenticatedUser } from "@/types/auth/session.types.js";
 
 export interface RouteContext {
   params?: Record<string, string>;
+  user?: AuthenticatedUser;
 }
 
 type NextRouteContext = {
@@ -30,10 +33,15 @@ async function resolveParams(
 
 export function withApiHandler(
   handler: RouteHandler,
-  options: { requireAuth?: boolean; route: string; method: string },
+  options: {
+    requireAuth?: boolean;
+    permission?: Permission;
+    route: string;
+    method: string;
+  },
 ): (request: Request, routeContext: NextRouteContext) => Promise<Response> {
   const requireAuth = options.requireAuth ?? true;
-  const { route, method } = options;
+  const { route, method, permission } = options;
 
   return async (request, routeContext) => {
     const startedAt = Date.now();
@@ -42,13 +50,20 @@ export function withApiHandler(
     };
 
     try {
-      let userId: string | undefined;
-
       if (requireAuth) {
-        userId = getAuthenticatedUserId(request);
+        const user = await getAuthenticatedUser(request);
+        resolvedContext.user = user;
+
+        if (permission && !hasPermission(user.role, permission)) {
+          throw ApiError.forbidden(`Missing permission: ${permission}`);
+        }
       }
 
-      enforceRateLimit(request, { route, method, userId });
+      enforceRateLimit(request, {
+        route,
+        method,
+        userId: resolvedContext.user?.id,
+      });
 
       const response = await handler(request, resolvedContext);
 
@@ -88,6 +103,14 @@ export function requireParams(
   }
 
   return parsed.data as Record<string, string>;
+}
+
+export function requireUser(context: RouteContext): AuthenticatedUser {
+  if (!context.user) {
+    throw ApiError.unauthorized();
+  }
+
+  return context.user;
 }
 
 function formatZodIssues(error: unknown): Array<{ field?: string; message: string }> {

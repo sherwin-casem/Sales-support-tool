@@ -12,6 +12,7 @@ import {
   isDisplayEmpty,
 } from "@/lib/results/display-fields";
 import type { OpenResultDetailOptions } from "@/types/results/result-detail.types";
+import { IntentBadge } from "@/components/results/IntentBadge";
 import { cn } from "@/lib/utils/cn";
 
 interface ResultRowProps {
@@ -65,6 +66,9 @@ export const ResultRow = memo(function ResultRow({
         ) : (
           <span className="text-sm text-slate-400">{displayValue(null)}</span>
         )}
+      </td>
+      <td className="px-4 py-4 align-top">
+        <IntentBadge score={result.company.intentScore} />
       </td>
       <td className="px-4 py-4 align-top text-sm text-slate-700">
         {displayValue(profile?.industry)}

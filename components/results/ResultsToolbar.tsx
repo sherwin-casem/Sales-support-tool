@@ -20,6 +20,7 @@ const sortLabels: Record<(typeof RESULTS_SORT_OPTIONS)[number], string> = {
   company_asc: "Company: A to Z",
   company_desc: "Company: Z to A",
   rank_asc: "Discovery rank",
+  intent_desc: "Intent score (high to low)",
 };
 
 export function ResultsToolbar({ view, onChange, disabled = false }: ResultsToolbarProps) {

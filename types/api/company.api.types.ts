@@ -61,12 +61,25 @@ export interface CompanySearchAppearanceResponse {
   searchedAt: string;
 }
 
+export interface IntentSignalDetailResponse {
+  id: string;
+  type: string;
+  title: string;
+  summary: string;
+  sourceUrl: string | null;
+  confidence: number;
+  detectedAt: string;
+}
+
 export interface GetCompanyResponse {
   id: string;
   name: string | null;
   domain: string;
   normalizedDomain: string;
   websiteUrl: string | null;
+  intentScore: number | null;
+  intentUpdatedAt: string | null;
+  intentSignals: IntentSignalDetailResponse[];
   firstSeenAt: string;
   lastCrawledAt: string | null;
   createdAt: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getClientUserId } from "@/lib/config/client-auth";
+import { useSession } from "next-auth/react";
 
 export function getSavedCompaniesStorageKey(userId: string): string {
   return `saved-companies:${userId}`;
@@ -66,7 +66,8 @@ export function toggleSavedCompanyId(userId: string, companyId: string): Set<str
 }
 
 export function useSavedCompanies() {
-  const userId = getClientUserId();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "anonymous";
   const [savedIds, setSavedIds] = useState<Set<string>>(() => readSavedCompanyIds(userId));
 
   useEffect(() => {

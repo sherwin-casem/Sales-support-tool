@@ -50,6 +50,7 @@ export function ResultsList({
             <tr>
               <TableHeader>Company</TableHeader>
               <TableHeader>Website</TableHeader>
+              <TableHeader>Intent</TableHeader>
               <TableHeader>Industry</TableHeader>
               <TableHeader>Location</TableHeader>
               <TableHeader>Company size</TableHeader>

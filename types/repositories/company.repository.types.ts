@@ -85,7 +85,20 @@ export interface CompanySearchAppearanceRecord {
   searchedAt: Date;
 }
 
+export interface IntentSignalDetailRecord {
+  id: string;
+  type: string;
+  title: string;
+  summary: string;
+  sourceUrl: string | null;
+  confidence: number;
+  detectedAt: Date;
+}
+
 export interface CompanyDetailRecord extends CompanyRecord {
+  intentScore?: number | null;
+  intentUpdatedAt?: Date | null;
+  intentSignals?: IntentSignalDetailRecord[];
   profile: CompanyProfileRecord | null;
   profileHistory: Array<{
     version: number;

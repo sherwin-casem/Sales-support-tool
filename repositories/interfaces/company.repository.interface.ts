@@ -39,4 +39,8 @@ export interface CompanyRepository {
     userId: string,
     companyId: string,
   ): Promise<CompanyDetailRecord | null>;
+  findBySearchResultForUser(
+    userId: string,
+    searchResultId: string,
+  ): Promise<{ company: CompanyRecord; profile: CompanyProfileRecord } | null>;
 }

@@ -15,6 +15,12 @@ datasource db {
 // Enums
 // ---------------------------------------------------------------------------
 
+enum UserRole {
+  ADMIN
+  MANAGER
+  SALES_REP
+}
+
 enum SearchJobStatus {
   PENDING
   DISCOVERING
@@ -39,6 +45,84 @@ enum SearchResultStage {
   ENRICHED
 }
 
+enum IntentSignalType {
+  HIRING
+  FUNDING
+  EXPANSION
+  PRODUCT_LAUNCH
+  OTHER
+}
+
+enum OutreachChannel {
+  EMAIL
+  WHATSAPP
+  LINKEDIN
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  REPLIED
+  BOUNCED
+  FAILED
+  UNSUBSCRIBED
+}
+
+// ---------------------------------------------------------------------------
+// Organization — Parijat tenant
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @db.VarChar(200)
+  slug            String   @unique @db.VarChar(100)
+  servicesCatalog Json     @default("[]")
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  users     User[]
+  campaigns Campaign[]
+
+  @@map("organizations")
+}
+
+// ---------------------------------------------------------------------------
+// User — Parijat sales team members
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  email          String   @unique @db.VarChar(320)
+  passwordHash   String   @db.VarChar(255)
+  name           String   @db.VarChar(200)
+  role           UserRole @default(SALES_REP)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  searchJobs          SearchJob[]
+  outreachMessages    OutreachMessage[]
+  campaigns           Campaign[]
+  leadRefreshSchedules LeadRefreshSchedule[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
 // ---------------------------------------------------------------------------
 // Company — globally deduplicated company record keyed by domain
 // ---------------------------------------------------------------------------
@@ -49,16 +133,23 @@ model Company {
   normalizedDomain String    @unique @db.VarChar(253)
   name             String?   @db.VarChar(500)
   websiteUrl       String?   @db.VarChar(2048)
+  intentScore      Decimal?  @db.Decimal(4, 3)
+  intentUpdatedAt  DateTime? @db.Timestamptz(3)
   firstSeenAt      DateTime  @default(now()) @db.Timestamptz(3)
   lastCrawledAt    DateTime? @db.Timestamptz(3)
   createdAt        DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
 
-  profiles      CompanyProfile[]
-  searchResults SearchResult[]
+  profiles              CompanyProfile[]
+  searchResults         SearchResult[]
+  intentSignals         IntentSignal[]
+  outreachMessages      OutreachMessage[]
+  campaignRecipients    CampaignRecipient[]
+  leadRefreshSchedules  LeadRefreshSchedule[]
 
   @@index([lastCrawledAt])
   @@index([name])
+  @@index([intentScore])
   @@map("companies")
 }
 
@@ -88,6 +179,27 @@ model CompanyProfile {
 }
 
 // ---------------------------------------------------------------------------
+// IntentSignal — hiring, funding, expansion signals per company
+// ---------------------------------------------------------------------------
+
+model IntentSignal {
+  id         String           @id @default(uuid()) @db.Uuid
+  companyId  String           @db.Uuid
+  type       IntentSignalType
+  title      String           @db.VarChar(500)
+  summary    String           @db.Text
+  sourceUrl  String?          @db.VarChar(2048)
+  confidence Decimal          @db.Decimal(3, 2)
+  detectedAt DateTime         @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime?        @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, detectedAt(sort: Desc)])
+  @@map("intent_signals")
+}
+
+// ---------------------------------------------------------------------------
 // SearchJob — user-initiated search request and pipeline lifecycle
 // ---------------------------------------------------------------------------
 
@@ -104,6 +216,7 @@ model SearchJob {
   createdAt    DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
 
+  user    User           @relation(fields: [userId], references: [id])
   results SearchResult[]
 
   @@index([userId, createdAt(sort: Desc)])
@@ -138,4 +251,113 @@ model SearchResult {
   @@index([searchJobId, rank])
   @@index([companyId])
   @@map("search_results")
+}
+
+// ---------------------------------------------------------------------------
+// OutreachMessage — AI-generated personalized outreach content
+// ---------------------------------------------------------------------------
+
+model OutreachMessage {
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String          @db.Uuid
+  companyId       String          @db.Uuid
+  searchResultId  String?         @db.Uuid
+  channel         OutreachChannel @default(EMAIL)
+  subject         String          @db.VarChar(500)
+  bodyText        String          @db.Text
+  bodyHtml        String?         @db.Text
+  tone            String?         @db.VarChar(50)
+  promptVersion   String          @db.VarChar(50)
+  modelUsed       String          @db.VarChar(100)
+  parijatServices Json
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([companyId, createdAt(sort: Desc)])
+  @@map("outreach_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Campaign — mass email outreach
+// ---------------------------------------------------------------------------
+
+model Campaign {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @db.Uuid
+  organizationId String         @db.Uuid
+  name           String         @db.VarChar(200)
+  status         CampaignStatus @default(DRAFT)
+  subject        String         @db.VarChar(500)
+  bodyHtml       String         @db.Text
+  bodyText       String         @db.Text
+  scheduledAt    DateTime?      @db.Timestamptz(3)
+  startedAt      DateTime?      @db.Timestamptz(3)
+  completedAt    DateTime?      @db.Timestamptz(3)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+
+  user         User                @relation(fields: [userId], references: [id])
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  recipients   CampaignRecipient[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([organizationId, status])
+  @@map("campaigns")
+}
+
+// ---------------------------------------------------------------------------
+// CampaignRecipient — per-lead delivery tracking
+// ---------------------------------------------------------------------------
+
+model CampaignRecipient {
+  id             String          @id @default(uuid()) @db.Uuid
+  campaignId     String          @db.Uuid
+  companyId      String          @db.Uuid
+  searchResultId String?         @db.Uuid
+  toEmail        String          @db.VarChar(320)
+  toName         String?         @db.VarChar(200)
+  status         RecipientStatus @default(PENDING)
+  providerId     String?         @db.VarChar(200)
+  sentAt         DateTime?       @db.Timestamptz(3)
+  deliveredAt    DateTime?       @db.Timestamptz(3)
+  openedAt       DateTime?       @db.Timestamptz(3)
+  clickedAt      DateTime?       @db.Timestamptz(3)
+  repliedAt      DateTime?       @db.Timestamptz(3)
+  bouncedAt      DateTime?       @db.Timestamptz(3)
+  errorMessage   String?         @db.Text
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(3)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([campaignId, toEmail])
+  @@index([campaignId, status])
+  @@map("campaign_recipients")
+}
+
+// ---------------------------------------------------------------------------
+// LeadRefreshSchedule — scheduled profile refresh
+// ---------------------------------------------------------------------------
+
+model LeadRefreshSchedule {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  companyId    String    @db.Uuid
+  intervalDays Int       @default(30)
+  nextRunAt    DateTime  @db.Timestamptz(3)
+  lastRunAt    DateTime? @db.Timestamptz(3)
+  enabled      Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([enabled, nextRunAt])
+  @@map("lead_refresh_schedules")
 }

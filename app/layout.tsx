@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { SessionProvider } from "@/components/providers/SessionProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sales Intelligence",
-  description: "Discover and analyze companies using public web information",
+  title: "Parijat Sales Enablement",
+  description: "Discover leads, detect intent, and run personalized outreach",
 };
 
 export default function RootLayout({
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <SessionProvider>{children}</SessionProvider>
+      </body>
     </html>
   );
 }
