@@ -1,41 +1,33 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/v1/webhooks"];
+const SECURITY_HEADERS: Record<string, string> = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "X-DNS-Prefetch-Control": "off",
+};
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export function middleware(request: NextRequest) {
+  const response = NextResponse.next();
 
-  if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) {
-    return NextResponse.next();
+  for (const [header, value] of Object.entries(SECURITY_HEADERS)) {
+    response.headers.set(header, value);
   }
 
-  if (pathname.startsWith("/api/cron")) {
-    return NextResponse.next();
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=63072000; includeSubDomains; preload",
+    );
   }
 
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET,
-  });
-
-  const hasBearerAuth = request.headers.get("authorization")?.startsWith("Bearer ");
-
-  if (!token && !hasBearerAuth) {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        { error: { code: "UNAUTHORIZED", message: "Unauthorized", details: [] } },
-        { status: 401 },
-      );
-    }
-
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    response.headers.set("Cache-Control", "no-store");
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

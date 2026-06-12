@@ -1,10 +1,8 @@
-import { AppShell } from "@/components/layout/AppShell";
 import { SearchForm } from "@/components/search/SearchForm";
 
 export default function SearchPage() {
   return (
-    <AppShell>
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8 space-y-2">
         <p className="text-sm font-medium uppercase tracking-wide text-brand-600">
           Sales Intelligence
@@ -28,6 +26,5 @@ export default function SearchPage() {
         <SearchForm />
       </section>
     </main>
-    </AppShell>
   );
 }

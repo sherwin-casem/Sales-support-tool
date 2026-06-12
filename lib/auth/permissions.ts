@@ -1,3 +1,4 @@
+import { ApiError } from "@/lib/api/api-error.js";
 import type { UserRole } from "@prisma/client";
 
 export const PERMISSIONS = {
@@ -21,6 +22,6 @@ export function hasPermission(role: UserRole, permission: Permission): boolean {
 
 export function requirePermission(role: UserRole, permission: Permission): void {
   if (!hasPermission(role, permission)) {
-    throw new Error(`Role ${role} lacks permission ${permission}`);
+    throw ApiError.forbidden(`Role ${role} lacks permission ${permission}`);
   }
 }

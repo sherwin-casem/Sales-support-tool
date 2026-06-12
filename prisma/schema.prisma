@@ -15,12 +15,6 @@ datasource db {
 // Enums
 // ---------------------------------------------------------------------------
 
-enum UserRole {
-  ADMIN
-  MANAGER
-  SALES_REP
-}
-
 enum SearchJobStatus {
   PENDING
   DISCOVERING
@@ -43,6 +37,12 @@ enum SearchResultStage {
   ENRICHING
   ENRICH_FAILED
   ENRICHED
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  SALES_REP
 }
 
 enum IntentSignalType {
@@ -81,7 +81,7 @@ enum RecipientStatus {
 }
 
 // ---------------------------------------------------------------------------
-// Organization — Parijat tenant
+// Organization & users
 // ---------------------------------------------------------------------------
 
 model Organization {
@@ -98,10 +98,6 @@ model Organization {
   @@map("organizations")
 }
 
-// ---------------------------------------------------------------------------
-// User — Parijat sales team members
-// ---------------------------------------------------------------------------
-
 model User {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @db.Uuid
@@ -113,10 +109,10 @@ model User {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
-  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  searchJobs          SearchJob[]
-  outreachMessages    OutreachMessage[]
-  campaigns           Campaign[]
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  searchJobs           SearchJob[]
+  outreachMessages     OutreachMessage[]
+  campaigns            Campaign[]
   leadRefreshSchedules LeadRefreshSchedule[]
 
   @@index([organizationId])
@@ -140,12 +136,12 @@ model Company {
   createdAt        DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
 
-  profiles              CompanyProfile[]
-  searchResults         SearchResult[]
-  intentSignals         IntentSignal[]
-  outreachMessages      OutreachMessage[]
-  campaignRecipients    CampaignRecipient[]
-  leadRefreshSchedules  LeadRefreshSchedule[]
+  profiles             CompanyProfile[]
+  searchResults        SearchResult[]
+  intentSignals        IntentSignal[]
+  outreachMessages     OutreachMessage[]
+  campaignRecipients   CampaignRecipient[]
+  leadRefreshSchedules LeadRefreshSchedule[]
 
   @@index([lastCrawledAt])
   @@index([name])
@@ -176,27 +172,6 @@ model CompanyProfile {
   @@index([companyId, extractedAt(sort: Desc)])
   @@index([companyId, contentHash])
   @@map("company_profiles")
-}
-
-// ---------------------------------------------------------------------------
-// IntentSignal — hiring, funding, expansion signals per company
-// ---------------------------------------------------------------------------
-
-model IntentSignal {
-  id         String           @id @default(uuid()) @db.Uuid
-  companyId  String           @db.Uuid
-  type       IntentSignalType
-  title      String           @db.VarChar(500)
-  summary    String           @db.Text
-  sourceUrl  String?          @db.VarChar(2048)
-  confidence Decimal          @db.Decimal(3, 2)
-  detectedAt DateTime         @default(now()) @db.Timestamptz(3)
-  expiresAt  DateTime?        @db.Timestamptz(3)
-
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId, detectedAt(sort: Desc)])
-  @@map("intent_signals")
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +229,28 @@ model SearchResult {
 }
 
 // ---------------------------------------------------------------------------
-// OutreachMessage — AI-generated personalized outreach content
+// Intent signals
+// ---------------------------------------------------------------------------
+
+model IntentSignal {
+  id         String           @id @default(uuid()) @db.Uuid
+  companyId  String           @db.Uuid
+  type       IntentSignalType
+  title      String           @db.VarChar(500)
+  summary    String           @db.Text
+  sourceUrl  String?          @db.VarChar(2048)
+  confidence Decimal          @db.Decimal(3, 2)
+  detectedAt DateTime         @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime?        @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, detectedAt(sort: Desc)])
+  @@map("intent_signals")
+}
+
+// ---------------------------------------------------------------------------
+// Outreach messages (AI-generated drafts)
 // ---------------------------------------------------------------------------
 
 model OutreachMessage {
@@ -281,7 +277,7 @@ model OutreachMessage {
 }
 
 // ---------------------------------------------------------------------------
-// Campaign — mass email outreach
+// Email campaigns
 // ---------------------------------------------------------------------------
 
 model Campaign {
@@ -307,10 +303,6 @@ model Campaign {
   @@index([organizationId, status])
   @@map("campaigns")
 }
-
-// ---------------------------------------------------------------------------
-// CampaignRecipient — per-lead delivery tracking
-// ---------------------------------------------------------------------------
 
 model CampaignRecipient {
   id             String          @id @default(uuid()) @db.Uuid
@@ -340,7 +332,7 @@ model CampaignRecipient {
 }
 
 // ---------------------------------------------------------------------------
-// LeadRefreshSchedule — scheduled profile refresh
+// Lead refresh schedules
 // ---------------------------------------------------------------------------
 
 model LeadRefreshSchedule {

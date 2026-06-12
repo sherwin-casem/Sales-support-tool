@@ -1,23 +1,21 @@
 import { ApiError } from "@/lib/api/api-error.js";
-import { auth } from "@/lib/auth/auth.js";
 import {
   getSecurityConfig,
   isProductionAuthRequired,
 } from "@/lib/config/security.config.js";
-import type { AuthenticatedUser } from "@/types/auth/session.types.js";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function parseBearerUserId(request: Request): string | null {
+export function getAuthenticatedUserId(request: Request): string {
   const authorization = request.headers.get("authorization");
+  const security = getSecurityConfig();
 
   if (!authorization?.startsWith("Bearer ")) {
-    return null;
+    throw ApiError.unauthorized("Missing or invalid Authorization header");
   }
 
   const token = authorization.slice("Bearer ".length).trim();
-  const security = getSecurityConfig();
 
   if (security.API_AUTH_SECRET) {
     const prefix = `${security.API_AUTH_SECRET}:`;
@@ -36,7 +34,9 @@ function parseBearerUserId(request: Request): string | null {
   }
 
   if (isProductionAuthRequired() && !security.ALLOW_DEV_UUID_AUTH) {
-    return null;
+    throw ApiError.unauthorized(
+      "Production API requires API_AUTH_SECRET or explicit ALLOW_DEV_UUID_AUTH=true",
+    );
   }
 
   if (!UUID_PATTERN.test(token)) {
@@ -44,47 +44,4 @@ function parseBearerUserId(request: Request): string | null {
   }
 
   return token;
-}
-
-export async function getAuthenticatedUser(request: Request): Promise<AuthenticatedUser> {
-  const bearerUserId = parseBearerUserId(request);
-
-  if (bearerUserId) {
-    const { getPrismaClient } = await import("@/lib/db/prisma.client.js");
-    const user = await getPrismaClient().user.findUnique({
-      where: { id: bearerUserId },
-    });
-
-    if (!user?.isActive) {
-      throw ApiError.unauthorized("User not found or inactive");
-    }
-
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      organizationId: user.organizationId,
-    };
-  }
-
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw ApiError.unauthorized("Missing or invalid session");
-  }
-
-  return {
-    id: session.user.id,
-    email: session.user.email ?? "",
-    name: session.user.name ?? "",
-    role: session.user.role,
-    organizationId: session.user.organizationId,
-  };
-}
-
-/** @deprecated Use getAuthenticatedUser instead */
-export async function getAuthenticatedUserId(request: Request): Promise<string> {
-  const user = await getAuthenticatedUser(request);
-  return user.id;
 }

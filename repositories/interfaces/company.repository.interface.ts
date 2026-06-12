@@ -7,6 +7,7 @@ import type {
   ListCompaniesForUserResult,
   SaveCompanyProfileInput,
   SaveCompanyProfileResult,
+  SearchResultCompanyMatch,
   UpsertCompaniesResult,
   UpsertCompanyInput,
 } from "@/types/repositories/company.repository.types.js";
@@ -42,5 +43,5 @@ export interface CompanyRepository {
   findBySearchResultForUser(
     userId: string,
     searchResultId: string,
-  ): Promise<{ company: CompanyRecord; profile: CompanyProfileRecord } | null>;
+  ): Promise<SearchResultCompanyMatch | null>;
 }

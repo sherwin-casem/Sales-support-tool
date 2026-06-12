@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/api-error.js";
+import { getOutreachConfig } from "@/lib/config/outreach.config.js";
 import { validatePersonalEmail } from "@/lib/validations/lead-contact.validation.js";
 import { getCampaignRepository } from "@/repositories/prisma/campaign.repository.js";
 import { getCompanyRepository } from "@/repositories/prisma/company.repository.js";
@@ -155,8 +156,18 @@ export class CampaignApiService {
 
   async sendCampaign(user: AuthenticatedUser, campaignId: string) {
     await this.getCampaign(user, campaignId);
-    void getCampaignOrchestratorService().sendCampaign(campaignId, user.id);
-    return { id: campaignId, status: "RUNNING" };
+
+    const { resendApiKey } = getOutreachConfig();
+
+    if (!resendApiKey.trim()) {
+      throw ApiError.serviceUnavailable(
+        "Email delivery is not configured. Set RESEND_API_KEY to send campaigns.",
+      );
+    }
+
+    await getCampaignOrchestratorService().sendCampaign(campaignId, user.id);
+
+    return { id: campaignId, status: "COMPLETED" };
   }
 
   async pauseCampaign(user: AuthenticatedUser, campaignId: string) {

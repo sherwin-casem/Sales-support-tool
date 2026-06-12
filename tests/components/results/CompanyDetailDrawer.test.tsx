@@ -1,6 +1,13 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    back: vi.fn(),
+  }),
+}));
 import { CompanyDetailDrawer } from "@/components/results/CompanyDetailDrawer";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types.js";
 import { createExtractedCompanyProfile } from "../../helpers/extracted-company.fixture.js";
@@ -64,6 +71,8 @@ describe("CompanyDetailDrawer", () => {
     expect(html).toContain("Company contact");
     expect(html).toContain("info@acme.fi");
     expect(html).toContain("Target customers");
+    expect(html).toContain("Outreach message");
+    expect(html).toContain("Generate with AI");
     expect(html).not.toContain("Decision maker contact");
     expect(html).not.toContain("jane@acme.fi");
   });
