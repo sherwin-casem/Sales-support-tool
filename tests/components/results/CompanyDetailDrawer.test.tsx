@@ -156,6 +156,45 @@ describe("CompanyDetailDrawer", () => {
     expect(html).not.toContain("+358 9 111 2222");
   });
 
+  it("hides empty overview fields instead of showing em dashes", () => {
+    const html = renderDrawer(
+      createSearchResult({
+        industry: "logistics",
+        estimatedCompanySize: "unknown",
+        revenue: "unknown",
+        city: "unknown",
+        country: "unknown",
+      }),
+      "overview",
+    );
+
+    expect(html).toContain("Industry");
+    expect(html).toContain("logistics");
+    expect(html).not.toContain("Company size");
+    expect(html).not.toContain("Revenue");
+    expect(html).not.toContain("Location");
+    expect(html).not.toContain("—");
+  });
+
+  it("hides the overview detail grid when all overview fields are unknown", () => {
+    const html = renderDrawer(
+      createSearchResult({
+        industry: "unknown",
+        estimatedCompanySize: "unknown",
+        revenue: "unknown",
+        city: "unknown",
+        country: "unknown",
+      }),
+      "overview",
+    );
+
+    expect(html).toContain("Overview");
+    expect(html).not.toContain("Industry");
+    expect(html).not.toContain("Company size");
+    expect(html).not.toContain("Revenue");
+    expect(html).not.toContain("—");
+  });
+
   it("shows an empty technology state when no products are extracted", () => {
     const html = renderDrawer(createSearchResult({ products: [] }));
 

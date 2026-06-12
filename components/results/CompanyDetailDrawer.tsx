@@ -7,6 +7,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { DecisionMakerContactPanel } from "@/components/results/DecisionMakerContactPanel";
 import {
+  EMPTY_LABEL,
   displayValue,
   formatLocation,
   getCompanyDisplayName,
@@ -132,6 +133,16 @@ function CompanyOverviewContent({
     hasDisplayValue(profile?.linkedInUrl) ||
     hasDisplayValue(profile?.xUrl);
 
+  const location = formatLocation(profile, searchCriteria);
+  const overviewItems = profile
+    ? [
+        { label: "Industry", value: profile.industry },
+        { label: "Company size", value: profile.estimatedCompanySize },
+        { label: "Revenue", value: profile.revenue },
+        { label: "Location", value: location === EMPTY_LABEL ? null : location },
+      ].filter((item) => hasDisplayValue(item.value))
+    : [];
+
   return (
     <div className="space-y-6">
       {result.company.websiteUrl ? (
@@ -150,13 +161,20 @@ function CompanyOverviewContent({
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               Overview
             </h3>
-            <p className="text-sm leading-7 text-slate-700">{profile.description}</p>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <DetailItem label="Industry" value={displayValue(profile.industry)} />
-              <DetailItem label="Company size" value={displayValue(profile.estimatedCompanySize)} />
-              <DetailItem label="Revenue" value={displayValue(profile.revenue)} />
-              <DetailItem label="Location" value={formatLocation(profile, searchCriteria)} />
-            </dl>
+            {hasDisplayValue(profile.description) ? (
+              <p className="text-sm leading-7 text-slate-700">{profile.description}</p>
+            ) : null}
+            {overviewItems.length > 0 ? (
+              <dl className="grid gap-4 sm:grid-cols-2">
+                {overviewItems.map((item) => (
+                  <DetailItem
+                    key={item.label}
+                    label={item.label}
+                    value={displayValue(item.value)}
+                  />
+                ))}
+              </dl>
+            ) : null}
           </section>
 
           <TagSection
