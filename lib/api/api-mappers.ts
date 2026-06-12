@@ -126,6 +126,17 @@ export function mapGetCompanyResponse(detail: CompanyDetailRecord): GetCompanyRe
     domain: detail.domain,
     normalizedDomain: detail.normalizedDomain,
     websiteUrl: detail.websiteUrl,
+    intentScore: detail.intentScore ?? null,
+    intentUpdatedAt: toIsoString(detail.intentUpdatedAt ?? null),
+    intentSignals: (detail.intentSignals ?? []).map((signal) => ({
+      id: signal.id,
+      type: signal.type,
+      title: signal.title,
+      summary: signal.summary,
+      sourceUrl: signal.sourceUrl,
+      confidence: signal.confidence,
+      detectedAt: signal.detectedAt.toISOString(),
+    })),
     firstSeenAt: detail.firstSeenAt.toISOString(),
     lastCrawledAt: toIsoString(detail.lastCrawledAt),
     createdAt: detail.createdAt.toISOString(),
@@ -147,6 +158,7 @@ function mapSearchResultItem(result: RankedLeadRecord): SearchResultItemResponse
     company: mapCompanySummary(result.company),
     profile: sanitizeProfileForResponse(result.profile?.structuredData ?? null),
     profileCompleteness: result.profile?.completeness ?? null,
+    intentSignals: result.intentSignals,
   };
 }
 
@@ -156,6 +168,7 @@ function mapCompanySummary(company: RankedLeadRecord["company"]): CompanySummary
     name: company.name,
     domain: company.domain,
     websiteUrl: company.websiteUrl,
+    intentScore: company.intentScore ?? null,
   };
 }
 

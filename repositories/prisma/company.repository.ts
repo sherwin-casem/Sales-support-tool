@@ -369,7 +369,12 @@ export class PrismaCompanyRepository implements CompanyRepository {
       return null;
     }
 
-    const [company, latestProfile, profileHistory, recentSearches] = await Promise.all([
+    const intentRepository = await import("@/repositories/prisma/intent.repository.js").then(
+      (module) => module.getIntentRepository(),
+    );
+
+    const [company, latestProfile, profileHistory, recentSearches, intentSignals] =
+      await Promise.all([
       client.company.findUnique({ where: { id: companyId } }),
       client.companyProfile.findFirst({
         where: { companyId },
@@ -396,6 +401,7 @@ export class PrismaCompanyRepository implements CompanyRepository {
         orderBy: { discoveredAt: "desc" },
         take: 10,
       }),
+      intentRepository.findTopSignalsByCompanyId(companyId, 5),
     ]);
 
     if (!company) {
@@ -404,6 +410,17 @@ export class PrismaCompanyRepository implements CompanyRepository {
 
     return {
       ...mapCompany(company),
+      intentScore: company.intentScore?.toNumber() ?? null,
+      intentUpdatedAt: company.intentUpdatedAt,
+      intentSignals: intentSignals.map((signal) => ({
+        id: signal.id,
+        type: signal.type,
+        title: signal.title,
+        summary: signal.summary,
+        sourceUrl: signal.sourceUrl,
+        confidence: signal.confidence,
+        detectedAt: signal.detectedAt,
+      })),
       profile: latestProfile ? mapCompanyProfile(latestProfile) : null,
       profileHistory: profileHistory.map((profile) => ({
         version: profile.version,
@@ -419,6 +436,39 @@ export class PrismaCompanyRepository implements CompanyRepository {
         rank: result.rank,
         searchedAt: result.discoveredAt,
       })),
+    };
+  }
+
+  async findBySearchResultForUser(
+    userId: string,
+    searchResultId: string,
+  ): Promise<{ company: CompanyRecord; profile: CompanyProfileRecord } | null> {
+    const client = resolveDbClient(this.prisma);
+
+    const result = await client.searchResult.findFirst({
+      where: {
+        id: searchResultId,
+        searchJob: { userId },
+      },
+      include: { company: true },
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    const profile = await client.companyProfile.findFirst({
+      where: { companyId: result.companyId },
+      orderBy: { version: "desc" },
+    });
+
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      company: mapCompany(result.company),
+      profile: mapCompanyProfile(profile),
     };
   }
 }

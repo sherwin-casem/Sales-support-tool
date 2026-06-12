@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { AppShell } from "@/components/layout/AppShell";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ResultsList } from "@/components/results/ResultsList";
@@ -122,7 +123,8 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <AppShell>
+    <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-6">
         <Button type="button" variant="ghost" className="px-0" onClick={handleBack}>
           ← Back
@@ -163,6 +165,7 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
         />
       ) : null}
     </main>
+    </AppShell>
   );
 }
 

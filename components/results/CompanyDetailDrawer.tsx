@@ -22,6 +22,9 @@ import {
   resolveDisplayEmail,
   resolveDisplayPhone,
 } from "@/lib/results/profile-contacts";
+import { OutreachComposer } from "@/components/outreach/OutreachComposer";
+import { LeadRefreshToggle } from "@/components/company/LeadRefreshToggle";
+import { IntentBadge } from "@/components/results/IntentBadge";
 
 interface CompanyDetailDrawerProps {
   result: SearchResultItemResponse | null;
@@ -219,6 +222,36 @@ function CompanyOverviewContent({
               </dl>
             </section>
           ) : null}
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Intent
+              </h3>
+              <IntentBadge score={result.company.intentScore} />
+            </div>
+            {result.intentSignals && result.intentSignals.length > 0 ? (
+              <ul className="space-y-2">
+                {result.intentSignals.map((signal) => (
+                  <li
+                    key={signal.id}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                  >
+                    <span className="font-medium text-slate-900">{signal.title}</span>
+                    <span className="ml-2 text-xs uppercase text-slate-500">{signal.type}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-600">No intent signals detected yet.</p>
+            )}
+          </section>
+
+          <OutreachComposer
+            companyId={result.company.id}
+            searchResultId={result.searchResultId}
+          />
+          <LeadRefreshToggle companyId={result.company.id} />
         </>
       ) : (
         <section className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
