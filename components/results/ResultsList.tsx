@@ -10,6 +10,9 @@ interface ResultsListProps {
   pagination: PaginationMeta;
   searchCriteria: ParsedQuery | null;
   isSaved: (companyId: string) => boolean;
+  selectedIds: Set<string>;
+  onSelectChange: (searchResultId: string, selected: boolean) => void;
+  onSelectAllOnPage: (selected: boolean) => void;
   onOpenDetail: (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => void;
   onToggleSave: (companyId: string) => void;
   onPageChange: (page: number) => void;
@@ -20,10 +23,15 @@ export function ResultsList({
   pagination,
   searchCriteria,
   isSaved,
+  selectedIds,
+  onSelectChange,
+  onSelectAllOnPage,
   onOpenDetail,
   onToggleSave,
   onPageChange,
 }: ResultsListProps) {
+  const allSelectedOnPage = items.length > 0 && items.every((item) => selectedIds.has(item.searchResultId));
+  const someSelectedOnPage = items.some((item) => selectedIds.has(item.searchResultId));
   if (items.length === 0) {
     return (
       <section className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
@@ -48,9 +56,22 @@ export function ResultsList({
           </caption>
           <thead className="bg-slate-50">
             <tr>
+              <th scope="col" className="px-4 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={allSelectedOnPage}
+                  ref={(element) => {
+                    if (element) {
+                      element.indeterminate = !allSelectedOnPage && someSelectedOnPage;
+                    }
+                  }}
+                  aria-label="Select all on page"
+                  onChange={(event) => onSelectAllOnPage(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                />
+              </th>
               <TableHeader>Company</TableHeader>
               <TableHeader>Website</TableHeader>
-              <TableHeader>Intent</TableHeader>
               <TableHeader>Industry</TableHeader>
               <TableHeader>Location</TableHeader>
               <TableHeader>Company size</TableHeader>
@@ -65,6 +86,8 @@ export function ResultsList({
                 result={result}
                 searchCriteria={searchCriteria}
                 isSaved={isSaved(result.company.id)}
+                selected={selectedIds.has(result.searchResultId)}
+                onSelectChange={onSelectChange}
                 onOpenDetail={onOpenDetail}
                 onToggleSave={onToggleSave}
               />

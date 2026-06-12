@@ -35,8 +35,6 @@ export function sortSearchResults(
         return compareCompanyNames(left, right, "desc");
       case "rank_asc":
         return compareRanks(left, right);
-      case "intent_desc":
-        return compareIntentScores(left, right);
       default:
         return 0;
     }
@@ -91,14 +89,4 @@ function compareRanks(
   const rightRank = right.rank ?? Number.MAX_SAFE_INTEGER;
 
   return leftRank - rightRank;
-}
-
-function compareIntentScores(
-  left: SearchResultItemResponse,
-  right: SearchResultItemResponse,
-): number {
-  const leftScore = left.company.intentScore ?? 0;
-  const rightScore = right.company.intentScore ?? 0;
-
-  return rightScore - leftScore;
 }

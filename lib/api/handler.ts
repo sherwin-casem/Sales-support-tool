@@ -1,10 +1,14 @@
 import { apiLogger } from "@/lib/logging/logger.js";
 import { ApiError } from "@/lib/api/api-error.js";
-import { getAuthenticatedUser } from "@/lib/api/auth.js";
-import { hasPermission, type Permission } from "@/lib/auth/permissions.js";
 import { getClientIp, getRateLimiter } from "@/lib/api/rate-limit.js";
 import { errorResponse, toApiError } from "@/lib/api/http-response.js";
+import { getAuthenticatedUserId } from "@/lib/api/auth.js";
 import { getSecurityConfig } from "@/lib/config/security.config.js";
+import {
+  requirePermission,
+  type Permission,
+} from "@/lib/auth/permissions.js";
+import { getUserRepository } from "@/repositories/prisma/user.repository.js";
 import type { AuthenticatedUser } from "@/types/auth/session.types.js";
 
 export interface RouteContext {
@@ -35,9 +39,9 @@ export function withApiHandler(
   handler: RouteHandler,
   options: {
     requireAuth?: boolean;
-    permission?: Permission;
     route: string;
     method: string;
+    permission?: Permission;
   },
 ): (request: Request, routeContext: NextRouteContext) => Promise<Response> {
   const requireAuth = options.requireAuth ?? true;
@@ -50,20 +54,30 @@ export function withApiHandler(
     };
 
     try {
-      if (requireAuth) {
-        const user = await getAuthenticatedUser(request);
-        resolvedContext.user = user;
+      let userId: string | undefined;
 
-        if (permission && !hasPermission(user.role, permission)) {
-          throw ApiError.forbidden(`Missing permission: ${permission}`);
+      if (requireAuth) {
+        userId = getAuthenticatedUserId(request);
+        const userRecord = await getUserRepository().findById(userId);
+
+        if (!userRecord || !userRecord.isActive) {
+          throw ApiError.unauthorized("User not found or inactive");
         }
+
+        if (permission) {
+          requirePermission(userRecord.role, permission);
+        }
+
+        resolvedContext.user = {
+          id: userRecord.id,
+          email: userRecord.email,
+          name: userRecord.name,
+          role: userRecord.role,
+          organizationId: userRecord.organizationId,
+        };
       }
 
-      enforceRateLimit(request, {
-        route,
-        method,
-        userId: resolvedContext.user?.id,
-      });
+      enforceRateLimit(request, { route, method, userId });
 
       const response = await handler(request, resolvedContext);
 
@@ -92,6 +106,14 @@ export function withApiHandler(
   };
 }
 
+export function requireUser(context: RouteContext): AuthenticatedUser {
+  if (!context.user) {
+    throw ApiError.unauthorized("Authentication required");
+  }
+
+  return context.user;
+}
+
 export function requireParams(
   params: Record<string, string> | undefined,
   schema: { safeParse: (value: unknown) => { success: boolean; data?: unknown; error?: unknown } },
@@ -103,14 +125,6 @@ export function requireParams(
   }
 
   return parsed.data as Record<string, string>;
-}
-
-export function requireUser(context: RouteContext): AuthenticatedUser {
-  if (!context.user) {
-    throw ApiError.unauthorized();
-  }
-
-  return context.user;
 }
 
 function formatZodIssues(error: unknown): Array<{ field?: string; message: string }> {

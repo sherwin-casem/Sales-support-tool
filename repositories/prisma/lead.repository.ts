@@ -4,7 +4,6 @@ import { getPrismaClient } from "@/lib/db/prisma.client.js";
 import type { LeadRepository } from "@/repositories/interfaces/lead.repository.interface.js";
 import { mapCompany, mapCompanyProfile } from "@/repositories/prisma/mappers.js";
 import { findLatestProfilesByCompanyIds } from "@/repositories/prisma/repository.utils.js";
-import { getIntentRepository } from "@/repositories/prisma/intent.repository.js";
 import type { RankedLeadRecord } from "@/types/repositories/lead.repository.types.js";
 
 export class PrismaLeadRepository implements LeadRepository {
@@ -35,17 +34,6 @@ export class PrismaLeadRepository implements LeadRepository {
       profiles.map((profile) => [profile.companyId, mapCompanyProfile(profile)]),
     );
 
-    let intentByCompany = new Map<
-      string,
-      Array<{ id: string; type: string; title: string; confidence: number }>
-    >();
-
-    try {
-      intentByCompany = await getIntentRepository().findSignalsByCompanyIds(companyIds, 3);
-    } catch {
-      intentByCompany = new Map();
-    }
-
     return records.map((record) => ({
       searchResultId: record.id,
       searchJobId: record.searchJobId,
@@ -55,28 +43,10 @@ export class PrismaLeadRepository implements LeadRepository {
       stageError: record.stageError,
       discoveredAt: record.discoveredAt,
       completedAt: record.completedAt,
-      company: {
-        ...mapCompany(record.company),
-        intentScore: record.company.intentScore?.toNumber() ?? null,
-      },
+      company: mapCompany(record.company),
       profile: latestProfileByCompany.get(record.companyId) ?? null,
-      intentSignals: (intentByCompany.get(record.companyId) ?? []).map(mapIntentSignalSummary),
     }));
   }
-}
-
-function mapIntentSignalSummary(signal: {
-  id: string;
-  type: string;
-  title: string;
-  confidence: number;
-}) {
-  return {
-    id: signal.id,
-    type: signal.type,
-    title: signal.title,
-    confidence: signal.confidence,
-  };
 }
 
 let cachedRepository: PrismaLeadRepository | undefined;

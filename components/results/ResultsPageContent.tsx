@@ -3,9 +3,9 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { AppShell } from "@/components/layout/AppShell";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { CampaignCreateModal } from "@/components/outreach/CampaignCreateModal";
 import { ResultsList } from "@/components/results/ResultsList";
 import { ResultsToolbar } from "@/components/results/ResultsToolbar";
 import { SearchJobHeader } from "@/components/results/SearchJobHeader";
@@ -43,6 +43,10 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   const [view, setView] = useState<ResultsViewState>(DEFAULT_RESULTS_VIEW);
   const [selectedResult, setSelectedResult] = useState<SearchResultItemResponse | null>(null);
   const [detailFocus, setDetailFocus] = useState<ResultDetailFocus>("overview");
+  const [selectedSearchResultIds, setSelectedSearchResultIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [campaignModalOpen, setCampaignModalOpen] = useState(false);
 
   const handleOpenDetail = useCallback(
     (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => {
@@ -89,6 +93,43 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     [updateView],
   );
 
+  const handleSelectChange = useCallback((searchResultId: string, selected: boolean) => {
+    setSelectedSearchResultIds((current) => {
+      const next = new Set(current);
+
+      if (selected) {
+        next.add(searchResultId);
+      } else {
+        next.delete(searchResultId);
+      }
+
+      return next;
+    });
+  }, []);
+
+  const handleSelectAllOnPage = useCallback(
+    (selected: boolean) => {
+      if (!processed) {
+        return;
+      }
+
+      setSelectedSearchResultIds((current) => {
+        const next = new Set(current);
+
+        for (const item of processed.items) {
+          if (selected) {
+            next.add(item.searchResultId);
+          } else {
+            next.delete(item.searchResultId);
+          }
+        }
+
+        return next;
+      });
+    },
+    [processed],
+  );
+
   function handleBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
@@ -123,8 +164,7 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   }
 
   return (
-    <AppShell>
-    <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-6">
         <Button type="button" variant="ghost" className="px-0" onClick={handleBack}>
           ← Back
@@ -142,12 +182,35 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
           </p>
         ) : null}
 
+        {selectedSearchResultIds.size > 0 ? (
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+            <p className="text-sm font-medium text-brand-900">
+              {selectedSearchResultIds.size} lead{selectedSearchResultIds.size === 1 ? "" : "s"} selected
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSelectedSearchResultIds(new Set())}
+              >
+                Clear selection
+              </Button>
+              <Button type="button" onClick={() => setCampaignModalOpen(true)}>
+                Create campaign from selected
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
         {processed ? (
           <ResultsList
             items={processed.items}
             pagination={processed.pagination}
             searchCriteria={data.criteria}
             isSaved={isSaved}
+            selectedIds={selectedSearchResultIds}
+            onSelectChange={handleSelectChange}
+            onSelectAllOnPage={handleSelectAllOnPage}
             onOpenDetail={handleOpenDetail}
             onToggleSave={toggleSave}
             onPageChange={handlePageChange}
@@ -164,8 +227,14 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
           onClose={handleCloseDetail}
         />
       ) : null}
+
+      <CampaignCreateModal
+        open={campaignModalOpen}
+        searchResultIds={[...selectedSearchResultIds]}
+        onClose={() => setCampaignModalOpen(false)}
+        onCampaignCreated={(campaignId) => router.push(`/campaigns/${campaignId}`)}
+      />
     </main>
-    </AppShell>
   );
 }
 

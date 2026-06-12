@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types.js";
 import type { ResultDetailFocus } from "@/types/results/result-detail.types.js";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { DecisionMakerContactPanel } from "@/components/results/DecisionMakerContactPanel";
+import { OutreachComposer } from "@/components/outreach/OutreachComposer";
 import {
   EMPTY_LABEL,
   displayValue,
@@ -22,9 +24,6 @@ import {
   resolveDisplayEmail,
   resolveDisplayPhone,
 } from "@/lib/results/profile-contacts";
-import { OutreachComposer } from "@/components/outreach/OutreachComposer";
-import { LeadRefreshToggle } from "@/components/company/LeadRefreshToggle";
-import { IntentBadge } from "@/components/results/IntentBadge";
 
 interface CompanyDetailDrawerProps {
   result: SearchResultItemResponse | null;
@@ -41,6 +40,8 @@ export function CompanyDetailDrawer({
   focusSection = "overview",
   onClose,
 }: CompanyDetailDrawerProps) {
+  const router = useRouter();
+
   if (!result) {
     return null;
   }
@@ -70,6 +71,7 @@ export function CompanyDetailDrawer({
           companyPhone={companyPhone}
           companyEmail={companyEmail}
           searchCriteria={searchCriteria}
+          onCampaignCreated={(campaignId) => router.push(`/campaigns/${campaignId}`)}
         />
       )}
     </Drawer>
@@ -123,12 +125,14 @@ function CompanyOverviewContent({
   companyPhone,
   companyEmail,
   searchCriteria,
+  onCampaignCreated,
 }: {
   result: SearchResultItemResponse;
   profile: SearchResultItemResponse["profile"];
   companyPhone: string | null;
   companyEmail: string | null;
   searchCriteria: ParsedQuery | null;
+  onCampaignCreated?: (campaignId: string) => void;
 }) {
   const hasCompanyContact =
     Boolean(companyEmail) ||
@@ -136,6 +140,11 @@ function CompanyOverviewContent({
     hasDisplayValue(profile?.linkedInUrl) ||
     hasDisplayValue(profile?.xUrl);
 
+  const companyLabel = getCompanyDisplayName(
+    profile,
+    result.company.name,
+    result.company.domain,
+  );
   const location = formatLocation(profile, searchCriteria);
   const overviewItems = profile
     ? [
@@ -223,35 +232,12 @@ function CompanyOverviewContent({
             </section>
           ) : null}
 
-          <section className="space-y-3">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Intent
-              </h3>
-              <IntentBadge score={result.company.intentScore} />
-            </div>
-            {result.intentSignals && result.intentSignals.length > 0 ? (
-              <ul className="space-y-2">
-                {result.intentSignals.map((signal) => (
-                  <li
-                    key={signal.id}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                  >
-                    <span className="font-medium text-slate-900">{signal.title}</span>
-                    <span className="ml-2 text-xs uppercase text-slate-500">{signal.type}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-600">No intent signals detected yet.</p>
-            )}
-          </section>
-
           <OutreachComposer
             companyId={result.company.id}
             searchResultId={result.searchResultId}
+            companyLabel={companyLabel}
+            onCampaignCreated={onCampaignCreated}
           />
-          <LeadRefreshToggle companyId={result.company.id} />
         </>
       ) : (
         <section className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">

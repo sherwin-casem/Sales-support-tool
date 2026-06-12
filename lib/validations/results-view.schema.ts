@@ -4,7 +4,6 @@ export const RESULTS_SORT_OPTIONS = [
   "company_asc",
   "company_desc",
   "rank_asc",
-  "intent_desc",
 ] as const;
 
 export const RESULTS_PAGE_SIZE_OPTIONS = [10, 25, 50] as const;

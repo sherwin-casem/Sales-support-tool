@@ -1,7 +1,9 @@
 import { ApiError } from "@/lib/api/api-error.js";
 import { getEnv } from "@/lib/config/env.js";
+import { getPrismaClient } from "@/lib/db/prisma.client.js";
 import {
   GenerateOutreachMessageSchema,
+  resolveOutreachBodyHtml,
   type GenerateOutreachMessageInput,
 } from "@/lib/validations/outreach-message.schema.js";
 import { getIntentRepository } from "@/repositories/prisma/intent.repository.js";
@@ -35,6 +37,7 @@ export class OutreachMessageApiService {
     }
 
     const signals = await intentRepository.findTopSignalsByCompanyId(input.companyId, 5);
+    const searchCriteria = await this.resolveSearchCriteria(user.id, input.searchResultId);
     const env = getEnv();
     const agent = new OutreachMessageAgent(createOpenAIClient(env.OPENAI_API_KEY), {
       model: env.OPENAI_MODEL,
@@ -48,12 +51,17 @@ export class OutreachMessageApiService {
         tone: input.tone,
         channel: input.channel,
         servicesCatalog: JSON.stringify(organization.servicesCatalog, null, 2),
-        searchCriteria: "{}",
+        searchCriteria,
         companyProfile: JSON.stringify(detail.profile.structuredData, null, 2),
         intentSignals: JSON.stringify(signals, null, 2),
       });
 
       if (result.ok) {
+        const bodyHtml = resolveOutreachBodyHtml(
+          result.value.bodyText,
+          result.value.bodyHtml,
+        );
+
         const saved = await outreachRepository.createMessage({
           userId: user.id,
           companyId: input.companyId,
@@ -61,7 +69,7 @@ export class OutreachMessageApiService {
           channel: input.channel,
           subject: result.value.subject,
           bodyText: result.value.bodyText,
-          bodyHtml: result.value.bodyHtml ?? null,
+          bodyHtml,
           tone: input.tone,
           promptVersion: getDefaultOutreachMessagePromptVersion(),
           modelUsed: env.OPENAI_MODEL,
@@ -100,6 +108,33 @@ export class OutreachMessageApiService {
       tone: message.tone,
       createdAt: message.createdAt.toISOString(),
     }));
+  }
+
+  private async resolveSearchCriteria(
+    userId: string,
+    searchResultId?: string,
+  ): Promise<string> {
+    if (!searchResultId) {
+      return "{}";
+    }
+
+    const result = await getPrismaClient().searchResult.findFirst({
+      where: {
+        id: searchResultId,
+        searchJob: { userId },
+      },
+      select: {
+        searchJob: {
+          select: { criteria: true },
+        },
+      },
+    });
+
+    if (!result) {
+      return "{}";
+    }
+
+    return JSON.stringify(result.searchJob.criteria ?? {}, null, 2);
   }
 }
 

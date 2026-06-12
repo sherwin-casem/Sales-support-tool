@@ -27,19 +27,11 @@ export interface SearchSummaryResponse {
   skippedDuplicates: number;
 }
 
-export interface IntentSignalSummaryResponse {
-  id: string;
-  type: string;
-  title: string;
-  confidence: number;
-}
-
 export interface CompanySummaryResponse {
   id: string;
   name: string | null;
   domain: string;
   websiteUrl: string | null;
-  intentScore?: number | null;
 }
 
 export interface SearchResultItemResponse {
@@ -52,7 +44,6 @@ export interface SearchResultItemResponse {
   company: CompanySummaryResponse;
   profile: ExtractedCompany | null;
   profileCompleteness: number | null;
-  intentSignals?: IntentSignalSummaryResponse[];
 }
 
 export interface SearchStageFailureResponse {

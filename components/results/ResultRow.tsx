@@ -12,13 +12,14 @@ import {
   isDisplayEmpty,
 } from "@/lib/results/display-fields";
 import type { OpenResultDetailOptions } from "@/types/results/result-detail.types";
-import { IntentBadge } from "@/components/results/IntentBadge";
 import { cn } from "@/lib/utils/cn";
 
 interface ResultRowProps {
   result: SearchResultItemResponse;
   searchCriteria: ParsedQuery | null;
   isSaved: boolean;
+  selected: boolean;
+  onSelectChange: (searchResultId: string, selected: boolean) => void;
   onOpenDetail: (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => void;
   onToggleSave: (companyId: string) => void;
   className?: string;
@@ -29,6 +30,8 @@ export const ResultRow = memo(function ResultRow({
   result,
   searchCriteria,
   isSaved,
+  selected,
+  onSelectChange,
   onOpenDetail,
   onToggleSave,
   className,
@@ -44,6 +47,15 @@ export const ResultRow = memo(function ResultRow({
 
   return (
     <tr className={cn("border-b border-slate-100 last:border-b-0", className)}>
+      <td className="px-4 py-4 align-top">
+        <input
+          type="checkbox"
+          checked={selected}
+          aria-label={`Select ${companyLabel}`}
+          onChange={(event) => onSelectChange(result.searchResultId, event.target.checked)}
+          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+        />
+      </td>
       <td className="px-4 py-4 align-top">
         <button
           type="button"
@@ -66,9 +78,6 @@ export const ResultRow = memo(function ResultRow({
         ) : (
           <span className="text-sm text-slate-400">{displayValue(null)}</span>
         )}
-      </td>
-      <td className="px-4 py-4 align-top">
-        <IntentBadge score={result.company.intentScore} />
       </td>
       <td className="px-4 py-4 align-top text-sm text-slate-700">
         {displayValue(profile?.industry)}

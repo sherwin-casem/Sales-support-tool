@@ -1,8 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@/lib/auth/auth.js", () => ({
-  auth: vi.fn().mockResolvedValue(null),
-}));
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/api-error.js";
 import { withApiHandler } from "@/lib/api/handler.js";

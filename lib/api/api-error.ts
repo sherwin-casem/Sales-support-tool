@@ -25,10 +25,6 @@ export class ApiError extends Error {
     return new ApiError("UNAUTHORIZED", message, 401);
   }
 
-  static forbidden(message = "Forbidden"): ApiError {
-    return new ApiError("FORBIDDEN", message, 403);
-  }
-
   static notFound(message: string): ApiError {
     return new ApiError("NOT_FOUND", message, 404);
   }
@@ -45,6 +41,14 @@ export class ApiError extends Error {
     const error = new ApiError("RATE_LIMITED", message, 429);
     (error as ApiError & { retryAfterSeconds: number }).retryAfterSeconds = retryAfterSeconds;
     return error;
+  }
+
+  static forbidden(message = "Forbidden"): ApiError {
+    return new ApiError("FORBIDDEN", message, 403);
+  }
+
+  static serviceUnavailable(message = "Service unavailable"): ApiError {
+    return new ApiError("SERVICE_UNAVAILABLE", message, 503);
   }
 
   static internal(message = "Internal server error", cause?: unknown): ApiError {
