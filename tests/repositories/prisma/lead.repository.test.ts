@@ -20,7 +20,7 @@ describe("PrismaLeadRepository", () => {
         company,
       },
     ]);
-    prisma.companyProfile.findMany.mockResolvedValue([profile]);
+    prisma.$queryRaw.mockResolvedValue([profile]);
 
     const repository = new PrismaLeadRepository(prisma);
     const results = await repository.findResultsWithDetailsForJob(searchResult.searchJobId);

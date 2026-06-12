@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types.js";
 import { Button } from "@/components/ui/Button";
@@ -22,7 +23,8 @@ interface ResultRowProps {
   className?: string;
 }
 
-export function ResultRow({
+// Memoized so polling refreshes only re-render rows whose props changed.
+export const ResultRow = memo(function ResultRow({
   result,
   searchCriteria,
   isSaved,
@@ -100,4 +102,4 @@ export function ResultRow({
       </td>
     </tr>
   );
-}
+});

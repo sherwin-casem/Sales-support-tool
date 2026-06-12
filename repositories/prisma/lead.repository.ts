@@ -3,6 +3,7 @@ import { resolveDbClient, type DbClient } from "@/lib/db/db-client.types.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
 import type { LeadRepository } from "@/repositories/interfaces/lead.repository.interface.js";
 import { mapCompany, mapCompanyProfile } from "@/repositories/prisma/mappers.js";
+import { findLatestProfilesByCompanyIds } from "@/repositories/prisma/repository.utils.js";
 import type { RankedLeadRecord } from "@/types/repositories/lead.repository.types.js";
 
 export class PrismaLeadRepository implements LeadRepository {
@@ -27,26 +28,21 @@ export class PrismaLeadRepository implements LeadRepository {
     });
 
     const companyIds = records.map((record) => record.companyId);
-    const profiles = companyIds.length
-      ? await client.companyProfile.findMany({
-          where: { companyId: { in: companyIds } },
-          orderBy: [{ companyId: "asc" }, { version: "desc" }],
-        })
-      : [];
+    const profiles = await findLatestProfilesByCompanyIds(client, companyIds);
 
-    const latestProfileByCompany = new Map<string, ReturnType<typeof mapCompanyProfile>>();
-
-    for (const profile of profiles) {
-      if (!latestProfileByCompany.has(profile.companyId)) {
-        latestProfileByCompany.set(profile.companyId, mapCompanyProfile(profile));
-      }
-    }
+    const latestProfileByCompany = new Map(
+      profiles.map((profile) => [profile.companyId, mapCompanyProfile(profile)]),
+    );
 
     return records.map((record) => ({
       searchResultId: record.id,
       searchJobId: record.searchJobId,
+      companyId: record.companyId,
       rank: record.rank,
       stage: record.stage,
+      stageError: record.stageError,
+      discoveredAt: record.discoveredAt,
+      completedAt: record.completedAt,
       company: mapCompany(record.company),
       profile: latestProfileByCompany.get(record.companyId) ?? null,
     }));

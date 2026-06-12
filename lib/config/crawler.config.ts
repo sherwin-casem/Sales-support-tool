@@ -3,7 +3,6 @@ import { z } from "zod";
 const crawlerConfigSchema = z.object({
   CRAWLER_MAX_CONTEXTS: z.coerce.number().int().min(1).max(10).default(3),
   CRAWLER_GLOBAL_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(3),
-  CRAWLER_SEARCH_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
   CRAWLER_INTER_PAGE_DELAY_MS: z.coerce.number().int().min(0).default(1000),
   CRAWLER_DOMAIN_DELAY_MS: z.coerce.number().int().min(0).default(2000),
   CRAWLER_NAVIGATION_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30_000),

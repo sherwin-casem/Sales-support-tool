@@ -83,7 +83,7 @@ model CompanyProfile {
 
   @@unique([companyId, version])
   @@index([companyId, extractedAt(sort: Desc)])
-  @@index([contentHash])
+  @@index([companyId, contentHash])
   @@map("company_profiles")
 }
 
@@ -108,6 +108,7 @@ model SearchJob {
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt])
+  @@index([status, updatedAt])
   @@map("search_jobs")
 }
 

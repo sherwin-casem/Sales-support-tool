@@ -18,6 +18,7 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const requestIdRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
 
   const load = useCallback(
     async (options: { initial?: boolean } = {}) => {
@@ -40,6 +41,7 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
           return null;
         }
 
+        hasLoadedOnceRef.current = true;
         setData(response);
         setError(null);
         return response;
@@ -65,20 +67,26 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
   );
 
   useEffect(() => {
-    void load({ initial: true });
+    // Only the very first fetch shows the full-page skeleton; filter changes
+    // refresh in the background instead of flashing the loading state.
+    void load({ initial: !hasLoadedOnceRef.current });
   }, [load]);
 
+  const isJobActive = data !== null && isSearchJobActive(data.status);
+
   useEffect(() => {
-    if (!data || !isSearchJobActive(data.status)) {
+    if (!isJobActive) {
       return;
     }
 
+    // Depend on the active flag (not the data object) so the interval is not
+    // torn down and recreated after every poll response.
     const intervalId = window.setInterval(() => {
       void load();
     }, POLL_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [data, load]);
+  }, [isJobActive, load]);
 
   return {
     data,

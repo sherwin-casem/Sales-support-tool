@@ -1,11 +1,9 @@
 import { SearchJobStatus, SearchResultStage } from "@prisma/client";
-import { getCrawlerConfig } from "@/lib/config/crawler.config.js";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
 import { isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
 import { computeExtractionCompleteness } from "@/lib/validations/company-extraction.schema.js";
 import { logger } from "@/lib/logging/logger.js";
 import { runWithConcurrency } from "@/lib/utils/concurrency.js";
-import { withRetry } from "@/lib/utils/retry.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
@@ -62,10 +60,6 @@ export interface SearchOrchestratorDependencies {
 }
 
 export interface SearchOrchestratorOptions {
-  maxAttempts?: number;
-  initialDelayMs?: number;
-  crawlConcurrency?: number;
-  extractionConcurrency?: number;
   enrichmentConcurrency?: number;
   minProfileCompleteness?: number;
 }
@@ -96,14 +90,7 @@ interface SavedProfileMeta {
   extractedAt: Date;
 }
 
-const DEFAULT_MAX_ATTEMPTS = 2;
-const DEFAULT_INITIAL_DELAY_MS = 500;
-
 export class SearchOrchestrator {
-  private readonly maxAttempts: number;
-  private readonly initialDelayMs: number;
-  private readonly crawlConcurrency: number;
-  private readonly extractionConcurrency: number;
   private readonly enrichmentConcurrency: number;
   private readonly minProfileCompleteness: number;
 
@@ -113,12 +100,6 @@ export class SearchOrchestrator {
   ) {
     const pipelineConfig = getPipelineConfig();
 
-    this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
-    this.initialDelayMs = options.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
-    this.crawlConcurrency =
-      options.crawlConcurrency ?? getCrawlerConfig().CRAWLER_SEARCH_CONCURRENCY;
-    this.extractionConcurrency =
-      options.extractionConcurrency ?? pipelineConfig.SEARCH_EXTRACTION_CONCURRENCY;
     this.enrichmentConcurrency =
       options.enrichmentConcurrency ?? pipelineConfig.SEARCH_ENRICHMENT_CONCURRENCY;
     this.minProfileCompleteness =
@@ -179,7 +160,7 @@ export class SearchOrchestrator {
         startedAt: new Date(),
       });
 
-      const criteriaResult = await this.parseQueryWithRetry(input.query);
+      const criteriaResult = await this.parseQuery(input.query);
 
       if (!criteriaResult.ok) {
         await this.failJob(searchJobId, criteriaResult.error.message);
@@ -190,7 +171,7 @@ export class SearchOrchestrator {
 
       await this.deps.searchRepository.updateJobCriteria(searchJobId, criteria);
 
-      const discoveriesResult = await this.discoverCompaniesWithRetry(
+      const discoveriesResult = await this.discoverCompanies(
         input.query,
         criteria,
         input.companyLimit ?? job.companyLimit,
@@ -292,80 +273,52 @@ export class SearchOrchestrator {
     }
   }
 
-  private async parseQueryWithRetry(
+  private async parseQuery(
     query: string,
   ): Promise<Result<ParsedQuery, SearchOrchestratorError>> {
-    try {
-      const result = await withRetry(
-        async () => {
-          const parsed = await this.deps.queryParser.parse(query);
+    const parsed = await this.deps.queryParser.parse(query);
 
-          if (!parsed.ok) {
-            throw parsed.error;
-          }
-
-          return parsed.value;
-        },
-        {
-          maxAttempts: this.maxAttempts,
-          initialDelayMs: this.initialDelayMs,
-        },
-      );
-
-      return ok(result);
-    } catch (error) {
+    if (!parsed.ok) {
       return err(
         new SearchOrchestratorError(
           "QUERY_PARSE_FAILED",
-          error instanceof Error ? error.message : "Failed to parse search query",
-          error,
+          parsed.error.message,
+          parsed.error,
         ),
       );
     }
+
+    return ok(parsed.value);
   }
 
-  private async discoverCompaniesWithRetry(
+  private async discoverCompanies(
     query: string,
     criteria: ParsedQuery,
     limit: number | null,
   ): Promise<Result<DiscoveredCompany[], SearchOrchestratorError>> {
-    try {
-      const result = await withRetry(
-        async () => {
-          const discoveryInput: CompanyDiscoveryInput = {
-            query,
-            industry: criteria.industry !== "unknown" ? criteria.industry : undefined,
-            location: criteria.location !== "unknown" ? criteria.location : undefined,
-          };
+    const discoveryInput: CompanyDiscoveryInput = {
+      query,
+      industry: criteria.industry !== "unknown" ? criteria.industry : undefined,
+      location: criteria.location !== "unknown" ? criteria.location : undefined,
+    };
 
-          if (typeof limit === "number") {
-            discoveryInput.limit = limit;
-          }
+    if (typeof limit === "number") {
+      discoveryInput.limit = limit;
+    }
 
-          const discovered = await this.deps.companyDiscovery.discover(discoveryInput);
+    const discovered = await this.deps.companyDiscovery.discover(discoveryInput);
 
-          if (!discovered.ok) {
-            throw discovered.error;
-          }
-
-          return discovered.value;
-        },
-        {
-          maxAttempts: this.maxAttempts,
-          initialDelayMs: this.initialDelayMs,
-        },
-      );
-
-      return ok(result);
-    } catch (error) {
+    if (!discovered.ok) {
       return err(
         new SearchOrchestratorError(
           "DISCOVERY_FAILED",
-          error instanceof Error ? error.message : "Company discovery failed",
-          error,
+          discovered.error.message,
+          discovered.error,
         ),
       );
     }
+
+    return ok(discovered.value);
   }
 
   private async processLeadHybrid(searchResult: SearchResultRecord): Promise<StageOutcome> {
@@ -386,20 +339,13 @@ export class SearchOrchestrator {
 
     const stubProfile = createDiscoveryStubProfile(company.name ?? company.domain);
 
-    const enrichmentResult = await this.runWithResultRetry(
-      () =>
-        this.deps.leadEnrichment.enrich({
-          companyName: stubProfile.companyName,
-          domain: company.normalizedDomain,
-          website: company.websiteUrl!,
-          websiteProfile: stubProfile,
-          companyId: company.id,
-        }),
-      (error) =>
-        error.code === "OPENAI_ERROR" ||
-        error.code === "VALIDATION_ERROR" ||
-        error.code === "EMPTY_RESPONSE",
-    );
+    const enrichmentResult = await this.deps.leadEnrichment.enrich({
+      companyName: stubProfile.companyName,
+      domain: company.normalizedDomain,
+      website: company.websiteUrl!,
+      websiteProfile: stubProfile,
+      companyId: company.id,
+    });
 
     if (!enrichmentResult.ok) {
       logger.info("SearchOrchestrator web enrichment failed, attempting crawl fallback", {
@@ -563,16 +509,12 @@ export class SearchOrchestrator {
       stage: SearchResultStage.CRAWLING,
     });
 
-    const crawlResult = await this.runWithResultRetry(
-      () =>
-        this.deps.websiteCrawler.crawl({
-          companyId: input.companyId,
-          website: input.website,
-          normalizedDomain: input.normalizedDomain,
-          paths: input.paths,
-        }),
-      (error) => error.code === "CRAWL_FAILED" || error.code === "BROWSER_ERROR",
-    );
+    const crawlResult = await this.deps.websiteCrawler.crawl({
+      companyId: input.companyId,
+      website: input.website,
+      normalizedDomain: input.normalizedDomain,
+      paths: input.paths,
+    });
 
     if (!crawlResult.ok) {
       logger.info("SearchOrchestrator crawl skipped after failure", {
@@ -612,18 +554,11 @@ export class SearchOrchestrator {
       stage: SearchResultStage.EXTRACTING,
     });
 
-    const extractionResult = await this.runWithResultRetry(
-      () =>
-        this.deps.companyExtraction.extract({
-          content: llmContent,
-          domain: input.normalizedDomain,
-          companyId: input.companyId,
-        }),
-      (error) =>
-        error.code === "OPENAI_ERROR" ||
-        error.code === "VALIDATION_ERROR" ||
-        error.code === "EMPTY_RESPONSE",
-    );
+    const extractionResult = await this.deps.companyExtraction.extract({
+      content: llmContent,
+      domain: input.normalizedDomain,
+      companyId: input.companyId,
+    });
 
     if (!extractionResult.ok) {
       const hintedProfile = this.applyHtmlContactHints(input.mergeWith, htmlPages);
@@ -732,30 +667,6 @@ export class SearchOrchestrator {
     );
   }
 
-  private async runWithResultRetry<T, E extends { code: string; message: string }>(
-    operation: () => Promise<Result<T, E>>,
-    isRetryable: (error: E) => boolean,
-  ): Promise<Result<T, E>> {
-    let lastResult: Result<T, E> | undefined;
-
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
-      const result = await operation();
-      lastResult = result;
-
-      if (result.ok) {
-        return result;
-      }
-
-      if (!isRetryable(result.error) || attempt === this.maxAttempts) {
-        return result;
-      }
-
-      await sleep(this.initialDelayMs * attempt);
-    }
-
-    return lastResult!;
-  }
-
   private async removeUnenrichedLead(
     searchResultId: string,
     companyId: string,
@@ -844,10 +755,6 @@ function buildNoCompaniesDiscoveredMessage(query: string, criteria: ParsedQuery)
     `No companies discovered for query "${query}"${hints}. ` +
     "Try a more specific description or a different location and retry."
   );
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function createSearchOrchestrator(

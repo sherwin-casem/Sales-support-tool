@@ -1,10 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { CompanyDetailDrawer } from "@/components/results/CompanyDetailDrawer";
 import { ResultsList } from "@/components/results/ResultsList";
 import { ResultsToolbar } from "@/components/results/ResultsToolbar";
 import { SearchJobHeader } from "@/components/results/SearchJobHeader";
@@ -23,6 +23,16 @@ import type {
   ResultDetailFocus,
 } from "@/types/results/result-detail.types";
 
+// Lazy-loaded: the drawer (and its large contact-validation dependency) is only
+// fetched when a result is opened, keeping it out of the initial bundle.
+const CompanyDetailDrawer = dynamic(
+  () =>
+    import("@/components/results/CompanyDetailDrawer.js").then(
+      (mod) => mod.CompanyDetailDrawer,
+    ),
+  { ssr: false },
+);
+
 interface ResultsPageContentProps {
   searchJobId: string;
 }
@@ -33,18 +43,19 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   const [selectedResult, setSelectedResult] = useState<SearchResultItemResponse | null>(null);
   const [detailFocus, setDetailFocus] = useState<ResultDetailFocus>("overview");
 
-  function handleOpenDetail(
-    result: SearchResultItemResponse,
-    options?: OpenResultDetailOptions,
-  ) {
-    setSelectedResult(result);
-    setDetailFocus(options?.focus ?? "overview");
-  }
+  const handleOpenDetail = useCallback(
+    (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => {
+      setSelectedResult(result);
+      setDetailFocus(options?.focus ?? "overview");
+    },
+    [],
+  );
 
-  function handleCloseDetail() {
+  const handleCloseDetail = useCallback(() => {
     setSelectedResult(null);
     setDetailFocus("overview");
-  }
+  }, []);
+
   const { isSaved, toggleSave } = useSavedCompanies();
 
   const apiFilters = useMemo(
@@ -68,9 +79,14 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     return processSearchResults(data.results, parsedView);
   }, [data, view]);
 
-  function updateView(patch: Partial<ResultsViewState>) {
+  const updateView = useCallback((patch: Partial<ResultsViewState>) => {
     setView((current) => ResultsViewSchema.parse({ ...current, ...patch }));
-  }
+  }, []);
+
+  const handlePageChange = useCallback(
+    (page: number) => updateView({ page }),
+    [updateView],
+  );
 
   function handleBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -116,7 +132,7 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
       <div className="space-y-6">
         <SearchJobHeader job={data} isRefreshing={isRefreshing} />
 
-        <ResultsToolbar view={view} onChange={updateView} disabled={isRefreshing} />
+        <ResultsToolbar view={view} onChange={updateView} />
 
         {isSearchJobActive(data.status) ? (
           <p className="text-sm text-slate-600" aria-live="polite">
@@ -132,18 +148,20 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
             isSaved={isSaved}
             onOpenDetail={handleOpenDetail}
             onToggleSave={toggleSave}
-            onPageChange={(page) => updateView({ page })}
+            onPageChange={handlePageChange}
           />
         ) : null}
       </div>
 
-      <CompanyDetailDrawer
-        result={selectedResult}
-        searchCriteria={data.criteria}
-        open={selectedResult !== null}
-        focusSection={detailFocus}
-        onClose={handleCloseDetail}
-      />
+      {selectedResult ? (
+        <CompanyDetailDrawer
+          result={selectedResult}
+          searchCriteria={data.criteria}
+          open
+          focusSection={detailFocus}
+          onClose={handleCloseDetail}
+        />
+      ) : null}
     </main>
   );
 }

@@ -19,12 +19,10 @@ import {
 const SYSTEM_PROMPT_PATH = "enrichment/lead-enrichment.system.md";
 const USER_PROMPT_PATH = "enrichment/lead-enrichment.user.md";
 const SCHEMA_NAME = "lead_enrichment";
-const MAX_ATTEMPTS = 2;
 
 export interface LeadEnrichmentAgentOptions {
   model: string;
   promptLoader?: PromptLoader;
-  maxAttempts?: number;
   searchContextSize?: "low" | "medium" | "high";
 }
 
@@ -32,16 +30,15 @@ export class LeadEnrichmentAgent
   implements Agent<LeadEnrichmentInput, ExtractedCompany, AgentError>
 {
   private readonly promptLoader: PromptLoader;
-  private readonly maxAttempts: number;
 
   constructor(
     private readonly openai: OpenAIClientPort,
     private readonly options: LeadEnrichmentAgentOptions,
   ) {
     this.promptLoader = options.promptLoader ?? new PromptLoader();
-    this.maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
   }
 
+  // Single attempt by design: retries live at the service layer only.
   async execute(
     input: LeadEnrichmentInput,
   ): Promise<Result<ExtractedCompany, AgentError>> {
@@ -57,43 +54,23 @@ export class LeadEnrichmentAgent
       );
     }
 
-    let lastValidationError: AgentError | undefined;
+    const completionResult = await this.requestCompletion(parsedInput.data);
 
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
-      const completionResult = await this.requestCompletion(parsedInput.data);
-
-      if (!completionResult.ok) {
-        if (attempt === this.maxAttempts) {
-          return completionResult;
-        }
-
-        continue;
-      }
-
-      const validated = this.validateOutput(completionResult.value);
-
-      if (validated.ok) {
-        aiLogger.info("LeadEnrichmentAgent.execute completed", {
-          companyId: parsedInput.data.companyId,
-          domain: parsedInput.data.domain,
-          attempt,
-          promptVersion: LEAD_ENRICHMENT_PROMPT_VERSION,
-        });
-
-        return validated;
-      }
-
-      lastValidationError = validated.error;
-
-      if (attempt === this.maxAttempts) {
-        return err(validated.error);
-      }
+    if (!completionResult.ok) {
+      return completionResult;
     }
 
-    return err(
-      lastValidationError ??
-        new AgentError("VALIDATION_ERROR", "Failed to enrich lead profile"),
-    );
+    const validated = this.validateOutput(completionResult.value);
+
+    if (validated.ok) {
+      aiLogger.info("LeadEnrichmentAgent.execute completed", {
+        companyId: parsedInput.data.companyId,
+        domain: parsedInput.data.domain,
+        promptVersion: LEAD_ENRICHMENT_PROMPT_VERSION,
+      });
+    }
+
+    return validated;
   }
 
   private async requestCompletion(

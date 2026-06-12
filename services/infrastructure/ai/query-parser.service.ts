@@ -13,8 +13,29 @@ export interface QueryParserPort {
   parse(query: string): Promise<Result<ParsedQuery, QueryParserError>>;
 }
 
+export interface QueryParserServiceOptions {
+  maxAttempts?: number;
+  initialDelayMs?: number;
+}
+
+const RETRYABLE_CODES: ReadonlySet<AgentError["code"]> = new Set([
+  "OPENAI_ERROR",
+  "EMPTY_RESPONSE",
+  "VALIDATION_ERROR",
+  "PARSE_ERROR",
+]);
+
 export class QueryParserService implements QueryParserPort {
-  constructor(private readonly agent: QueryParserAgent) {}
+  private readonly maxAttempts: number;
+  private readonly initialDelayMs: number;
+
+  constructor(
+    private readonly agent: QueryParserAgent,
+    options: QueryParserServiceOptions = {},
+  ) {
+    this.maxAttempts = options.maxAttempts ?? 2;
+    this.initialDelayMs = options.initialDelayMs ?? 500;
+  }
 
   async parse(query: string): Promise<Result<ParsedQuery, QueryParserError>> {
     const startedAt = Date.now();
@@ -24,29 +45,46 @@ export class QueryParserService implements QueryParserPort {
       promptVersion: getDefaultPromptVersion(),
     });
 
-    const result = await this.agent.execute({ query });
+    let lastError: QueryParserError | undefined;
 
-    const durationMs = Date.now() - startedAt;
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      const result = await this.agent.execute({ query });
 
-    if (!result.ok) {
-      aiLogger.error("QueryParserService.parse failed", {
-        code: result.error.code,
-        durationMs,
-        queryLength: query.length,
-      });
+      if (result.ok) {
+        aiLogger.info("QueryParserService.parse completed", {
+          durationMs: Date.now() - startedAt,
+          attempt,
+          industry: result.value.industry,
+          location: result.value.location,
+          employeeRange: result.value.employeeRange,
+        });
 
-      return err(QueryParserError.fromAgentError(result.error));
+        return ok(result.value);
+      }
+
+      lastError = QueryParserError.fromAgentError(result.error);
+
+      if (!RETRYABLE_CODES.has(result.error.code) || attempt === this.maxAttempts) {
+        break;
+      }
+
+      await sleep(this.initialDelayMs * attempt);
     }
 
-    aiLogger.info("QueryParserService.parse completed", {
-      durationMs,
-      industry: result.value.industry,
-      location: result.value.location,
-      employeeRange: result.value.employeeRange,
+    aiLogger.error("QueryParserService.parse failed", {
+      code: lastError?.code,
+      durationMs: Date.now() - startedAt,
+      queryLength: query.length,
     });
 
-    return ok(result.value);
+    return err(
+      lastError ?? new QueryParserError("VALIDATION_ERROR", "Query parsing failed"),
+    );
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 let cachedService: QueryParserService | undefined;

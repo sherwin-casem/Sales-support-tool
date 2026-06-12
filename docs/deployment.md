@@ -113,20 +113,18 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 |----------|---------|-------------|
 | `CRAWLER_MAX_CONTEXTS` | `3` | Browser contexts |
 | `CRAWLER_GLOBAL_CONCURRENCY` | `3` | Parallel crawl operations (shared pool) |
-| `CRAWLER_SEARCH_CONCURRENCY` | `3` | Companies crawled in parallel per search job |
 | `CRAWLER_RESPECT_ROBOTS` | `true` | Honor robots.txt |
 | `CRAWLER_USER_AGENT` | Bot identifier | Include contact URL |
 
-Set `CRAWLER_SEARCH_CONCURRENCY`, `CRAWLER_MAX_CONTEXTS`, and `CRAWLER_GLOBAL_CONCURRENCY` to similar values (e.g. all `3`). Raising search concurrency without enough browser contexts causes queueing.
+Set `SEARCH_ENRICHMENT_CONCURRENCY`, `CRAWLER_MAX_CONTEXTS`, and `CRAWLER_GLOBAL_CONCURRENCY` to similar values (e.g. all `3`). Raising enrichment concurrency without enough browser contexts causes queueing during crawl fallbacks.
 
 ### Search pipeline (OpenAI stages)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SEARCH_EXTRACTION_CONCURRENCY` | `3` | Companies extracted in parallel per search job |
-| `SEARCH_ENRICHMENT_CONCURRENCY` | `3` | Leads enriched in parallel per search job |
+| `SEARCH_ENRICHMENT_CONCURRENCY` | `3` | Leads enriched in parallel per search job (the only per-job concurrency knob) |
 
-Both stages call OpenAI. Keep concurrency modest to avoid rate limits; start at `3` and raise only if your API tier allows it.
+Enrichment calls OpenAI. Keep concurrency modest to avoid rate limits; start at `3` and raise only if your API tier allows it.
 
 ### Discovery (OpenAI web search)
 

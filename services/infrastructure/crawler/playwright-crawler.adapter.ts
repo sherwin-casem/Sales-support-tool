@@ -5,6 +5,7 @@ import { crawlPathResolverService } from "@/services/domain/crawler/crawl-path-r
 import { DomainRateLimiterService } from "@/services/domain/crawler/domain-rate-limiter.service.js";
 import { RobotsTxtService } from "@/services/domain/crawler/robots-txt.service.js";
 import type {
+  BrowserContextPort,
   BrowserPoolPort,
   PageCrawlerPort,
 } from "@/services/infrastructure/crawler/browser-pool.port.js";
@@ -78,63 +79,77 @@ export class PlaywrightCrawlerAdapter {
     baseUrl: string,
     targets: ReturnType<typeof crawlPathResolverService.resolve>,
   ): Promise<CrawledPage[]> {
-    const pages: CrawledPage[] = [];
+    try {
+      // One browser context per company crawl; pages are created and closed
+      // inside it instead of paying a context setup/teardown per page.
+      return await this.pool.withContext(async (context) => {
+        const pages: CrawledPage[] = [];
 
-    for (const target of targets) {
-      if (this.config.CRAWLER_RESPECT_ROBOTS) {
-        const allowed = await this.robotsTxt.isAllowed(baseUrl, target.path);
+        for (const target of targets) {
+          if (this.config.CRAWLER_RESPECT_ROBOTS) {
+            const allowed = await this.robotsTxt.isAllowed(baseUrl, target.path);
 
-        if (!allowed) {
-          pages.push(createFailedPage(target.path, target.url, "Blocked by robots.txt"));
-          continue;
+            if (!allowed) {
+              pages.push(createFailedPage(target.path, target.url, "Blocked by robots.txt"));
+              continue;
+            }
+          }
+
+          const pageResult = await this.rateLimiter.runExclusive(
+            input.normalizedDomain,
+            async () => this.crawlSinglePage(context, target.path, target.url),
+          );
+
+          pages.push(pageResult);
+
+          if (this.config.CRAWLER_INTER_PAGE_DELAY_MS > 0) {
+            await sleep(this.config.CRAWLER_INTER_PAGE_DELAY_MS);
+          }
         }
-      }
 
-      const pageResult = await this.rateLimiter.runExclusive(
-        input.normalizedDomain,
-        async () => this.crawlSinglePage(target.path, target.url),
-      );
+        return pages;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Browser error";
 
-      pages.push(pageResult);
+      crawlerLogger.warn("PlaywrightCrawlerAdapter company crawl failed", {
+        domain: input.normalizedDomain,
+        message,
+      });
 
-      if (this.config.CRAWLER_INTER_PAGE_DELAY_MS > 0) {
-        await sleep(this.config.CRAWLER_INTER_PAGE_DELAY_MS);
-      }
+      return targets.map((target) => createFailedPage(target.path, target.url, message));
     }
-
-    return pages;
   }
 
   private async crawlSinglePage(
+    context: BrowserContextPort,
     path: CrawledPage["path"],
     url: string,
   ): Promise<CrawledPage> {
     const crawledAt = new Date().toISOString();
 
     try {
-      return await this.pool.withContext(async (context) => {
-        const page = await context.newPage();
+      const page = await context.newPage();
 
-        try {
-          const outcome = await this.pageCrawler.crawlPage(page, path, url);
+      try {
+        const outcome = await this.pageCrawler.crawlPage(page, path, url);
 
-          if (!outcome.success || !outcome.page) {
-            return createFailedPage(path, url, outcome.error ?? "Unknown crawl error", crawledAt);
-          }
-
-          return {
-            path,
-            url,
-            httpStatus: outcome.page.httpStatus,
-            title: outcome.page.title,
-            contentText: outcome.page.contentText,
-            html: outcome.page.html,
-            crawledAt,
-          };
-        } finally {
-          await page.close();
+        if (!outcome.success || !outcome.page) {
+          return createFailedPage(path, url, outcome.error ?? "Unknown crawl error", crawledAt);
         }
-      });
+
+        return {
+          path,
+          url,
+          httpStatus: outcome.page.httpStatus,
+          title: outcome.page.title,
+          contentText: outcome.page.contentText,
+          html: outcome.page.html,
+          crawledAt,
+        };
+      } finally {
+        await page.close();
+      }
     } catch (error) {
       crawlerLogger.warn("PlaywrightCrawlerAdapter page crawl failed", {
         path,

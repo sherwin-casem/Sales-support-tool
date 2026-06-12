@@ -12,6 +12,9 @@ type MockFn = ReturnType<typeof vi.fn>;
 export type MockPrismaClient = PrismaClient & {
   company: {
     findUnique: MockFn;
+    findMany: MockFn;
+    create: MockFn;
+    createMany: MockFn;
     upsert: MockFn;
     update: MockFn;
   };
@@ -32,12 +35,15 @@ export type MockPrismaClient = PrismaClient & {
   };
   searchResult: {
     create: MockFn;
+    createMany: MockFn;
     findMany: MockFn;
     findUnique: MockFn;
     update: MockFn;
     delete: MockFn;
+    groupBy: MockFn;
   };
   $transaction: MockFn;
+  $queryRaw: MockFn;
 };
 
 export function createMockCompany(overrides: Partial<{
@@ -180,6 +186,9 @@ export function createMockPrismaClient() {
   const client = {
     company: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      createMany: vi.fn(),
       upsert: vi.fn(),
       update: vi.fn(),
     },
@@ -199,14 +208,17 @@ export function createMockPrismaClient() {
     },
     searchResult: {
       create: vi.fn(),
+      createMany: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      groupBy: vi.fn(),
     },
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback(client),
     ),
+    $queryRaw: vi.fn().mockResolvedValue([]),
   };
 
   return client as unknown as MockPrismaClient;

@@ -201,6 +201,7 @@ function createDependencies(
           stageError: input.stageError ?? null,
         }),
       ),
+      countResultsByStage: vi.fn().mockResolvedValue({}),
       deleteResult: vi.fn().mockResolvedValue(undefined),
       findResultById: vi.fn(),
     },
@@ -235,7 +236,7 @@ function createDependencies(
 describe("SearchOrchestrator", () => {
   it("runs the hybrid enrichment pipeline successfully", async () => {
     const deps = createDependencies();
-    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const orchestrator = new SearchOrchestrator(deps);
 
     const result = await orchestrator.run({
       userId,
@@ -298,7 +299,7 @@ describe("SearchOrchestrator", () => {
       }),
     );
 
-    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const orchestrator = new SearchOrchestrator(deps);
     const result = await orchestrator.run({
       userId,
       query: "Find logistics companies in Finland with 50-200 employees",
@@ -345,7 +346,7 @@ describe("SearchOrchestrator", () => {
       }),
     );
 
-    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1, minProfileCompleteness: 0 });
+    const orchestrator = new SearchOrchestrator(deps, { minProfileCompleteness: 0 });
     const result = await orchestrator.run({
       userId,
       query: "Find logistics companies in Finland with 50-200 employees",
@@ -420,7 +421,6 @@ describe("SearchOrchestrator", () => {
     );
 
     const orchestrator = new SearchOrchestrator(deps, {
-      maxAttempts: 1,
       minProfileCompleteness: 0.35,
     });
     const result = await orchestrator.run({
@@ -450,7 +450,7 @@ describe("SearchOrchestrator", () => {
       err(new WebsiteCrawlerError("CRAWL_FAILED", "All crawl paths failed")),
     );
 
-    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const orchestrator = new SearchOrchestrator(deps);
     const result = await orchestrator.run({
       userId,
       query: "Find logistics companies in Finland with 50-200 employees",
@@ -474,37 +474,13 @@ describe("SearchOrchestrator", () => {
     );
   });
 
-  it("retries query parsing before failing the job", async () => {
-    const deps = createDependencies();
-    deps.queryParser.parse = vi
-      .fn()
-      .mockResolvedValueOnce(err(new QueryParserError("VALIDATION_ERROR", "invalid")))
-      .mockResolvedValueOnce(ok(criteria));
-
-    const orchestrator = new SearchOrchestrator(deps, {
-      maxAttempts: 2,
-      initialDelayMs: 1,
-    });
-
-    const result = await orchestrator.run({
-      userId,
-      query: "Find logistics companies in Finland",
-    });
-
-    expect(result.ok).toBe(true);
-    expect(deps.queryParser.parse).toHaveBeenCalledTimes(2);
-  });
-
-  it("fails the job when query parsing exhausts retries", async () => {
+  it("fails the job when query parsing fails", async () => {
     const deps = createDependencies();
     deps.queryParser.parse = vi
       .fn()
       .mockResolvedValue(err(new QueryParserError("VALIDATION_ERROR", "invalid query")));
 
-    const orchestrator = new SearchOrchestrator(deps, {
-      maxAttempts: 2,
-      initialDelayMs: 1,
-    });
+    const orchestrator = new SearchOrchestrator(deps);
 
     const result = await orchestrator.run({
       userId,
@@ -517,6 +493,7 @@ describe("SearchOrchestrator", () => {
       expect(result.error.code).toBe("QUERY_PARSE_FAILED");
     }
 
+    expect(deps.queryParser.parse).toHaveBeenCalledTimes(1);
     expect(deps.searchRepository.updateJobStatus).toHaveBeenCalledWith(
       searchJobId,
       "FAILED",
@@ -623,7 +600,6 @@ describe("SearchOrchestrator", () => {
     });
 
     const orchestrator = new SearchOrchestrator(deps, {
-      maxAttempts: 1,
       enrichmentConcurrency: 3,
     });
 
@@ -726,7 +702,6 @@ describe("SearchOrchestrator", () => {
     });
 
     const orchestrator = new SearchOrchestrator(deps, {
-      maxAttempts: 1,
       enrichmentConcurrency: 3,
     });
 
@@ -819,7 +794,7 @@ describe("SearchOrchestrator", () => {
       });
     });
 
-    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const orchestrator = new SearchOrchestrator(deps);
     const result = await orchestrator.run({
       userId,
       query: "Find logistics companies in Finland",
@@ -843,7 +818,7 @@ describe("SearchOrchestrator", () => {
     const deps = createDependencies();
     deps.companyDiscovery.discover = vi.fn().mockResolvedValue(ok([]));
 
-    const orchestrator = new SearchOrchestrator(deps, { maxAttempts: 1 });
+    const orchestrator = new SearchOrchestrator(deps);
     const result = await orchestrator.run({
       userId,
       query: "Find logistics companies in Finland",
@@ -857,7 +832,7 @@ describe("SearchOrchestrator", () => {
   });
 
   it("rejects invalid input", async () => {
-    const orchestrator = new SearchOrchestrator(createDependencies(), { maxAttempts: 1 });
+    const orchestrator = new SearchOrchestrator(createDependencies());
 
     const result = await orchestrator.run({
       userId: " ",

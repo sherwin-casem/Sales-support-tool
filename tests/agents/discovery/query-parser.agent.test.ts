@@ -34,7 +34,6 @@ describe("QueryParserAgent", () => {
     agent = new QueryParserAgent(openai, {
       model: "gpt-4o-mini",
       promptLoader: new PromptLoader(promptsRoot),
-      maxAttempts: 2,
     });
   });
 
@@ -63,32 +62,7 @@ describe("QueryParserAgent", () => {
     expect(createStructuredCompletion).toHaveBeenCalledOnce();
   });
 
-  it("retries once when OpenAI returns invalid JSON shape", async () => {
-    createStructuredCompletion
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          industry: "logistics",
-          location: "Finland",
-          employeeRange: "lots",
-        }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          industry: "logistics",
-          location: "Finland",
-          employeeRange: "50-200",
-        }),
-      );
-
-    const result = await agent.execute({
-      query: "Find logistics companies in Finland with 50-200 employees.",
-    });
-
-    expect(result.ok).toBe(true);
-    expect(createStructuredCompletion).toHaveBeenCalledTimes(2);
-  });
-
-  it("returns validation error after retries are exhausted", async () => {
+  it("returns validation error for invalid JSON shape without retrying", async () => {
     createStructuredCompletion.mockResolvedValue(
       JSON.stringify({
         industry: "logistics",
@@ -105,7 +79,7 @@ describe("QueryParserAgent", () => {
     if (!result.ok) {
       expect(result.error.code).toBe("VALIDATION_ERROR");
     }
-    expect(createStructuredCompletion).toHaveBeenCalledTimes(2);
+    expect(createStructuredCompletion).toHaveBeenCalledOnce();
   });
 
   it("returns invalid input error for empty query", async () => {

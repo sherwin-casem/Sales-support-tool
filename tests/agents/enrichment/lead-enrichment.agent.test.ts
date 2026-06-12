@@ -58,7 +58,6 @@ describe("LeadEnrichmentAgent", () => {
     agent = new LeadEnrichmentAgent(openai, {
       model: "gpt-4o",
       promptLoader: new PromptLoader(promptsRoot),
-      maxAttempts: 2,
     });
   });
 
@@ -109,17 +108,8 @@ describe("LeadEnrichmentAgent", () => {
     expect(createWebDiscoveryCompletion).not.toHaveBeenCalled();
   });
 
-  it("retries when OpenAI returns invalid JSON", async () => {
-    createWebDiscoveryCompletion
-      .mockResolvedValueOnce("not json")
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          profile: {
-            ...websiteProfile,
-            city: "Helsinki",
-          },
-        }),
-      );
+  it("returns validation error for invalid JSON without retrying", async () => {
+    createWebDiscoveryCompletion.mockResolvedValue("not json");
 
     const result = await agent.execute({
       companyId,
@@ -129,7 +119,10 @@ describe("LeadEnrichmentAgent", () => {
       websiteProfile,
     });
 
-    expect(result.ok).toBe(true);
-    expect(createWebDiscoveryCompletion).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
+    expect(createWebDiscoveryCompletion).toHaveBeenCalledOnce();
   });
 });

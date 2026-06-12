@@ -39,7 +39,7 @@ function createDependencies(
         ),
       ),
       findJobByIdForUser: vi.fn().mockResolvedValue(createJob()),
-      findResultsByJobId: vi.fn().mockResolvedValue([]),
+      countResultsByStage: vi.fn().mockResolvedValue({}),
       countActiveJobsForUser: vi.fn().mockResolvedValue(0),
     } as unknown as SearchApiServiceDependencies["searchRepository"],
     leadRepository: {
@@ -113,7 +113,7 @@ describe("SearchApiService", () => {
       searchRepository: {
         createJob: vi.fn(),
         findJobByIdForUser: vi.fn().mockResolvedValue(null),
-        findResultsByJobId: vi.fn(),
+        countResultsByStage: vi.fn(),
       } as unknown as SearchApiServiceDependencies["searchRepository"],
     });
     const service = new SearchApiService(deps);
@@ -133,30 +133,19 @@ describe("SearchApiService", () => {
         findJobByIdForUser: vi.fn().mockResolvedValue(
           createJob({ status: "COMPLETED", criteria: { industry: "logistics" } }),
         ),
-        findResultsByJobId: vi.fn().mockResolvedValue([
-          {
-            id: "00000000-0000-4000-8000-000000000040",
-            searchJobId,
-            companyId: "00000000-0000-4000-8000-000000000010",
-            stage: "ENRICHED",
-            rank: 1,
-            discoverySource: null,
-            discoveryUrl: null,
-            stageError: null,
-            discoveredAt: new Date("2026-06-07T12:00:00.000Z"),
-            completedAt: new Date("2026-06-07T12:01:00.000Z"),
-            createdAt: new Date("2026-06-07T12:00:00.000Z"),
-            updatedAt: new Date("2026-06-07T12:01:00.000Z"),
-          },
-        ]),
+        countResultsByStage: vi.fn().mockResolvedValue({ ENRICHED: 1 }),
       } as unknown as SearchApiServiceDependencies["searchRepository"],
       leadRepository: {
         findResultsWithDetailsForJob: vi.fn().mockResolvedValue([
           {
             searchResultId: "00000000-0000-4000-8000-000000000040",
             searchJobId,
+            companyId: "00000000-0000-4000-8000-000000000010",
             rank: 1,
             stage: "ENRICHED",
+            stageError: null,
+            discoveredAt: new Date("2026-06-07T12:00:00.000Z"),
+            completedAt: new Date("2026-06-07T12:01:00.000Z"),
             company: {
               id: "00000000-0000-4000-8000-000000000010",
               domain: "acme.fi",

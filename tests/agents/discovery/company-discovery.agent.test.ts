@@ -121,7 +121,6 @@ describe("CompanyDiscoveryAgent", () => {
 
     const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
       model: "gpt-4o-mini",
-      maxAttempts: 1,
     });
 
     const result = await agent.execute({
@@ -177,31 +176,21 @@ describe("CompanyDiscoveryAgent", () => {
     }
   });
 
-  it("retries when OpenAI returns invalid JSON", async () => {
-    const createWebDiscoveryCompletion = vi
-      .fn()
-      .mockResolvedValueOnce("not-json")
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          companies: [
-            {
-              companyName: "Retry Logistics",
-              website: "https://retry.fi",
-            },
-          ],
-        }),
-      );
+  it("returns discovery failed for invalid JSON without retrying", async () => {
+    const createWebDiscoveryCompletion = vi.fn().mockResolvedValue("not-json");
 
     const agent = new CompanyDiscoveryAgent(createOpenAiMock(createWebDiscoveryCompletion), {
       model: "gpt-4o-mini",
-      maxAttempts: 2,
     });
 
     const result = await agent.execute({
       query: "logistics companies in Finland",
     });
 
-    expect(result.ok).toBe(true);
-    expect(createWebDiscoveryCompletion).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("DISCOVERY_FAILED");
+    }
+    expect(createWebDiscoveryCompletion).toHaveBeenCalledOnce();
   });
 });
