@@ -1,7 +1,7 @@
 import { requireUser, requireParams, withApiHandler } from "@/lib/api/handler";
 import { jsonResponse } from "@/lib/api/http-response";
 import { readJsonBodyWithSchema } from "@/lib/api/parse-request";
-import { getCampaignApiService } from "@/services/application/campaign-api.service";
+import { getCampaignApiService } from "@/services/application/campaign-api.factory";
 import { z } from "zod";
 
 const CampaignIdParamsSchema = z.object({

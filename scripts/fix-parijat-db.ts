@@ -9,58 +9,70 @@ const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
 async function main() {
   const passwordHash = await hash("parijat-admin", 12);
 
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "organizations" (
-      "id" UUID NOT NULL PRIMARY KEY,
-      "name" VARCHAR(200) NOT NULL,
-      "slug" VARCHAR(100) NOT NULL UNIQUE,
-      "servicesCatalog" JSONB NOT NULL DEFAULT '[]',
-      "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  await prisma.organization.upsert({
+    where: { slug: "parijat" },
+    create: {
+      id: PARIJAT_ORG_ID,
+      name: "Parijat",
+      slug: "parijat",
+      servicesCatalog: [],
+    },
+    update: {
+      name: "Parijat",
+    },
+  });
 
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "users" (
-      "id" UUID NOT NULL PRIMARY KEY,
-      "organizationId" UUID NOT NULL,
-      "email" VARCHAR(320) NOT NULL UNIQUE,
-      "passwordHash" VARCHAR(255) NOT NULL,
-      "name" VARCHAR(200) NOT NULL,
-      "role" TEXT NOT NULL DEFAULT 'SALES_REP',
-      "isActive" BOOLEAN NOT NULL DEFAULT true,
-      "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  await prisma.user.upsert({
+    where: { email: "admin@parijat.com" },
+    create: {
+      id: ADMIN_USER_ID,
+      organizationId: PARIJAT_ORG_ID,
+      email: "admin@parijat.com",
+      passwordHash,
+      name: "Parijat Admin",
+      role: "ADMIN",
+      isActive: true,
+    },
+    update: {
+      passwordHash,
+      isActive: true,
+      name: "Parijat Admin",
+      role: "ADMIN",
+    },
+  });
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "organizations" ("id", "name", "slug", "servicesCatalog", "createdAt", "updatedAt")
-     VALUES ($1::uuid, 'Parijat', 'parijat', '[]'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-     ON CONFLICT ("slug") DO NOTHING`,
-    PARIJAT_ORG_ID,
-  );
+  const legacyJobs = await prisma.searchJob.findMany({
+    select: { userId: true },
+    distinct: ["userId"],
+  });
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "users" ("id", "organizationId", "email", "passwordHash", "name", "role", "isActive", "createdAt", "updatedAt")
-     VALUES ($1::uuid, $2::uuid, 'admin@parijat.com', $3, 'Parijat Admin', 'ADMIN', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-     ON CONFLICT ("email") DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", "isActive" = true`,
-    ADMIN_USER_ID,
-    PARIJAT_ORG_ID,
-    passwordHash,
-  );
+  for (const job of legacyJobs) {
+    const existing = await prisma.user.findUnique({ where: { id: job.userId } });
 
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO "users" ("id", "organizationId", "email", "passwordHash", "name", "role", "isActive", "createdAt", "updatedAt")
-    SELECT DISTINCT sj."userId", $1::uuid, sj."userId"::text || '@legacy.local', $2, 'Legacy User', 'SALES_REP', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM "search_jobs" sj
-    WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = sj."userId")
-    ON CONFLICT ("email") DO NOTHING
-  `, PARIJAT_ORG_ID, passwordHash);
+    if (existing) {
+      continue;
+    }
 
-  console.log("Parijat org and users seeded for FK migration");
+    await prisma.user.create({
+      data: {
+        id: job.userId,
+        organizationId: PARIJAT_ORG_ID,
+        email: `${job.userId}@legacy.local`,
+        passwordHash,
+        name: "Legacy User",
+        role: "SALES_REP",
+        isActive: true,
+      },
+    });
+  }
+
+  console.log("Parijat org and users seeded");
+  console.log("Login: admin@parijat.com / parijat-admin");
 }
 
 main()
-  .catch(console.error)
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
   .finally(() => prisma.$disconnect());

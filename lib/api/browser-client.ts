@@ -1,5 +1,4 @@
 import { ApiClientError } from "@/lib/api/api-client-error";
-import { getClientAuthorizationHeader } from "@/lib/config/client-auth";
 import type { ApiErrorBody } from "@/types/api/error.api.types";
 import type { CreateSearchRequestInput } from "@/lib/validations/api/search.schema";
 import type { GetCompanyResponse } from "@/types/api/company.api.types";
@@ -27,9 +26,9 @@ export async function createSearchRequest(
 ): Promise<CreateSearchResponse> {
   const response = await fetch("/api/v1/search", {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      Authorization: getClientAuthorizationHeader(),
     },
     body: JSON.stringify(input),
   });
@@ -65,9 +64,7 @@ export async function fetchSearchJob(
   const response = await fetch(
     `/api/v1/search/${searchJobId}${buildSearchQueryString(query)}`,
     {
-      headers: {
-        Authorization: getClientAuthorizationHeader(),
-      },
+      credentials: "include",
       cache: "no-store",
     },
   );
@@ -81,9 +78,7 @@ export async function fetchSearchJob(
 
 export async function fetchCompany(companyId: string): Promise<GetCompanyResponse> {
   const response = await fetch(`/api/v1/companies/${companyId}`, {
-    headers: {
-      Authorization: getClientAuthorizationHeader(),
-    },
+    credentials: "include",
     cache: "no-store",
   });
 
@@ -99,7 +94,6 @@ export async function apiFetch<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("Authorization", getClientAuthorizationHeader());
 
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -107,6 +101,7 @@ export async function apiFetch<T>(
 
   const response = await fetch(path, {
     ...init,
+    credentials: "include",
     headers,
     cache: "no-store",
   });

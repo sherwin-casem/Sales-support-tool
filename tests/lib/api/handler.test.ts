@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/api-error.js";
 import { withApiHandler } from "@/lib/api/handler.js";
@@ -6,6 +6,10 @@ import {
   parseJsonBodyWithSchema,
   parseQueryParamsWithSchema,
 } from "@/lib/api/parse-request.js";
+
+vi.mock("@/lib/auth/auth.js", () => ({
+  auth: vi.fn().mockResolvedValue(null),
+}));
 
 describe("parse-request", () => {
   it("throws validation error for invalid JSON bodies", () => {

@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/api-error.js";
+import { auth } from "@/lib/auth/auth.js";
 import {
   getSecurityConfig,
   isProductionAuthRequired,
@@ -6,6 +7,16 @@ import {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function resolveAuthenticatedUserId(request: Request): Promise<string> {
+  const session = await auth();
+
+  if (session?.user?.id) {
+    return session.user.id;
+  }
+
+  return getAuthenticatedUserId(request);
+}
 
 export function getAuthenticatedUserId(request: Request): string {
   const authorization = request.headers.get("authorization");

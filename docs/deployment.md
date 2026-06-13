@@ -76,8 +76,12 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 | `DATABASE_URL` | Pooled connection string | Preview DB pooled URL | Prisma runtime queries (`?pgbouncer=true` for Neon) |
 | `DIRECT_URL` | Direct (non-pooled) URL | Preview direct URL | Prisma migrations & `migrate deploy` |
 | `OPENAI_API_KEY` | Prod key | Dev/staging key | OpenAI API |
-| `API_AUTH_SECRET` | 32+ char random secret | Staging secret | `Authorization: Bearer <secret>:<userId>` |
+| `API_AUTH_SECRET` | 32+ char random secret | Staging secret | `Authorization: Bearer <secret>:<userId>` for external API clients |
 | `ALLOW_DEV_UUID_AUTH` | `false` | `true` | Block UUID-only auth in production |
+| `AUTH_SECRET` | 32+ char random secret | Staging secret | NextAuth session signing |
+| `CRON_SECRET` | Random secret | Staging secret | Bearer token for `/api/cron/*` routes |
+| `RESEND_API_KEY` | Production key | Staging key | Campaign email delivery |
+| `RESEND_WEBHOOK_SECRET` | Resend webhook signing secret | Staging secret | Verifies `/api/v1/webhooks/resend` |
 
 ### Application
 
@@ -101,11 +105,13 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 | `SEARCH_JOB_ACTIVE_STALE_MS` | `1200000` (20 min) | Fail in-progress jobs with no updates older than this |
 | `API_MAX_JSON_BODY_BYTES` | `16384` | Max request body size |
 
-### Client (staging only)
+### Client (browser session auth)
+
+Browser UI authenticates via **NextAuth session cookies** (`credentials: include` on fetch). Do not rely on `NEXT_PUBLIC_DEV_USER_ID` in production.
 
 | Variable | Notes |
 |----------|-------|
-| `NEXT_PUBLIC_DEV_USER_ID` | **Preview only.** Do not set in production without session auth. |
+| `NEXT_PUBLIC_DEV_USER_ID` | Legacy bearer auth for external API clients only. Not used by the browser UI. |
 
 ### Crawler (worker service, not Vercel)
 
@@ -117,6 +123,19 @@ Set in **Vercel Project → Settings → Environment Variables**. Use separate v
 | `CRAWLER_USER_AGENT` | Bot identifier | Include contact URL |
 
 Set `SEARCH_ENRICHMENT_CONCURRENCY`, `CRAWLER_MAX_CONTEXTS`, and `CRAWLER_GLOBAL_CONCURRENCY` to similar values (e.g. all `3`). Raising enrichment concurrency without enough browser contexts causes queueing during crawl fallbacks.
+
+On Vercel-only deployments, rely on OpenAI web enrichment as the primary path. Deploy a separate Playwright worker if crawl fallback is required in production.
+
+### Scheduled jobs (Vercel Cron)
+
+Configured in `vercel.json`:
+
+| Path | Schedule | Purpose |
+|------|----------|---------|
+| `/api/cron/refresh-leads` | Hourly | Re-enrich due leads + intent detection |
+| `/api/cron/send-campaigns` | Every 5 minutes | Send campaigns with `status = SCHEDULED` and `scheduledAt <= now` |
+
+Cron routes require `Authorization: Bearer <CRON_SECRET>`.
 
 ### Search pipeline (OpenAI stages)
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { edgeAuth } from "@/lib/auth/edge-auth";
 
 const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
@@ -9,9 +10,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   "X-DNS-Prefetch-Control": "off",
 };
 
-export function middleware(request: NextRequest) {
-  const response = NextResponse.next();
-
+function applySecurityHeaders(response: NextResponse, request: NextRequest): NextResponse {
   for (const [header, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(header, value);
   }
@@ -29,6 +28,32 @@ export function middleware(request: NextRequest) {
 
   return response;
 }
+
+export default edgeAuth((request) => {
+  const pathname = request.nextUrl.pathname;
+  const isLoggedIn = Boolean(request.auth);
+  const isApiRoute = pathname.startsWith("/api/");
+  const isPublicApi =
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/cron/") ||
+    pathname.startsWith("/api/v1/webhooks/");
+  const protectedPrefixes = ["/search", "/campaigns", "/admin", "/analytics", "/companies"];
+  const needsAuth = protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
+
+  if (!isApiRoute || isPublicApi) {
+    if (needsAuth && !isLoggedIn) {
+      const loginUrl = new URL("/login", request.nextUrl);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    if (pathname === "/login" && isLoggedIn) {
+      return NextResponse.redirect(new URL("/search", request.nextUrl));
+    }
+  }
+
+  return applySecurityHeaders(NextResponse.next(), request);
+});
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],

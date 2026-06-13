@@ -156,6 +156,18 @@ export class CampaignRepository {
     return recipients.map(mapRecipient);
   }
 
+  async listDueScheduledCampaigns(now = new Date()): Promise<CampaignRecord[]> {
+    const campaigns = await getPrismaClient().campaign.findMany({
+      where: {
+        status: "SCHEDULED",
+        scheduledAt: { lte: now },
+      },
+      orderBy: { scheduledAt: "asc" },
+    });
+
+    return campaigns.map(mapCampaign);
+  }
+
   async countRecipientsByStatus(campaignId: string): Promise<Record<RecipientStatus, number>> {
     const groups = await getPrismaClient().campaignRecipient.groupBy({
       by: ["status"],

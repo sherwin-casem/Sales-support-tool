@@ -1,9 +1,9 @@
 import { ApiError } from "@/lib/api/api-error.js";
 import { getOutreachConfig } from "@/lib/config/outreach.config.js";
 import { validatePersonalEmail } from "@/lib/validations/lead-contact.validation.js";
-import { getCampaignRepository } from "@/repositories/prisma/campaign.repository.js";
-import { getCompanyRepository } from "@/repositories/prisma/company.repository.js";
-import { getCampaignOrchestratorService } from "@/services/application/campaign-orchestrator.service.js";
+import type { CampaignRepository } from "@/repositories/prisma/campaign.repository.js";
+import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
+import type { CampaignOrchestratorService } from "@/services/application/campaign-orchestrator.service.js";
 import type { AuthenticatedUser } from "@/types/auth/session.types.js";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 
@@ -16,6 +16,14 @@ export interface CreateCampaignInput {
   searchResultIds?: string[];
 }
 
+export interface CampaignApiServiceDependencies {
+  campaignRepository: CampaignRepository;
+  companyRepository: CompanyRepository;
+  campaignOrchestrator: Pick<CampaignOrchestratorService, "sendCampaign">;
+  scheduleBackgroundTask: (task: () => void | Promise<void>) => void;
+  getOutreachConfig?: typeof getOutreachConfig;
+}
+
 function resolveRecipientEmail(profile: ExtractedCompany): string | null {
   return (
     validatePersonalEmail(profile.decisionMakerEmail, profile.email) ??
@@ -24,9 +32,9 @@ function resolveRecipientEmail(profile: ExtractedCompany): string | null {
 }
 
 export class CampaignApiService {
+  constructor(private readonly deps: CampaignApiServiceDependencies) {}
+
   async createCampaign(user: AuthenticatedUser, input: CreateCampaignInput) {
-    const companyRepository = getCompanyRepository();
-    const campaignRepository = getCampaignRepository();
     const recipients: Array<{
       companyId: string;
       searchResultId?: string | null;
@@ -36,7 +44,7 @@ export class CampaignApiService {
 
     if (input.searchResultIds?.length) {
       for (const searchResultId of input.searchResultIds) {
-        const match = await companyRepository.findBySearchResultForUser(
+        const match = await this.deps.companyRepository.findBySearchResultForUser(
           user.id,
           searchResultId,
         );
@@ -64,7 +72,7 @@ export class CampaignApiService {
 
     if (input.companyIds?.length) {
       for (const companyId of input.companyIds) {
-        const detail = await companyRepository.findDetailForUser(user.id, companyId);
+        const detail = await this.deps.companyRepository.findDetailForUser(user.id, companyId);
 
         if (!detail?.profile) {
           throw ApiError.notFound(`Company not found: ${companyId}`);
@@ -90,7 +98,7 @@ export class CampaignApiService {
       throw ApiError.invalidInput("At least one recipient is required");
     }
 
-    const { campaign } = await campaignRepository.createCampaign({
+    const { campaign } = await this.deps.campaignRepository.createCampaign({
       userId: user.id,
       organizationId: user.organizationId,
       name: input.name,
@@ -104,7 +112,7 @@ export class CampaignApiService {
   }
 
   async listCampaigns(user: AuthenticatedUser) {
-    const campaigns = await getCampaignRepository().listForUser(
+    const campaigns = await this.deps.campaignRepository.listForUser(
       user.id,
       user.organizationId,
       user.role,
@@ -114,7 +122,7 @@ export class CampaignApiService {
   }
 
   async getCampaign(user: AuthenticatedUser, campaignId: string) {
-    const campaign = await getCampaignRepository().findById(campaignId);
+    const campaign = await this.deps.campaignRepository.findById(campaignId);
 
     if (!campaign) {
       throw ApiError.notFound(`Campaign not found: ${campaignId}`);
@@ -128,7 +136,7 @@ export class CampaignApiService {
       throw ApiError.forbidden("Campaign not in your organization");
     }
 
-    const statusCounts = await getCampaignRepository().countRecipientsByStatus(campaignId);
+    const statusCounts = await this.deps.campaignRepository.countRecipientsByStatus(campaignId);
 
     return {
       ...this.mapCampaignSummary(campaign),
@@ -150,30 +158,69 @@ export class CampaignApiService {
 
   async scheduleCampaign(user: AuthenticatedUser, campaignId: string, scheduledAt: Date) {
     const campaign = await this.getCampaign(user, campaignId);
-    await getCampaignRepository().updateStatus(campaign.id, "SCHEDULED", { scheduledAt });
+    await this.deps.campaignRepository.updateStatus(campaign.id, "SCHEDULED", { scheduledAt });
     return { id: campaign.id, status: "SCHEDULED", scheduledAt: scheduledAt.toISOString() };
   }
 
   async sendCampaign(user: AuthenticatedUser, campaignId: string) {
-    await this.getCampaign(user, campaignId);
+    const campaign = await this.getCampaign(user, campaignId);
+    const outreachConfig = (this.deps.getOutreachConfig ?? getOutreachConfig)();
 
-    const { resendApiKey } = getOutreachConfig();
-
-    if (!resendApiKey.trim()) {
+    if (!outreachConfig.resendApiKey.trim()) {
       throw ApiError.serviceUnavailable(
         "Email delivery is not configured. Set RESEND_API_KEY to send campaigns.",
       );
     }
 
-    await getCampaignOrchestratorService().sendCampaign(campaignId, user.id);
+    if (campaign.status === "RUNNING") {
+      return { id: campaignId, status: "RUNNING" };
+    }
 
-    return { id: campaignId, status: "COMPLETED" };
+    if (campaign.status !== "DRAFT" && campaign.status !== "SCHEDULED") {
+      throw ApiError.invalidInput(`Campaign cannot be sent from status ${campaign.status}`);
+    }
+
+    await this.deps.campaignRepository.updateStatus(campaignId, "RUNNING", {
+      startedAt: new Date(),
+    });
+
+    const userId = user.id;
+    this.deps.scheduleBackgroundTask(() =>
+      this.deps.campaignOrchestrator.sendCampaign(campaignId, userId),
+    );
+
+    return { id: campaignId, status: "RUNNING" };
   }
 
   async pauseCampaign(user: AuthenticatedUser, campaignId: string) {
     await this.getCampaign(user, campaignId);
-    await getCampaignRepository().updateStatus(campaignId, "PAUSED");
+    await this.deps.campaignRepository.updateStatus(campaignId, "PAUSED");
     return { id: campaignId, status: "PAUSED" };
+  }
+
+  async processDueScheduledCampaigns(): Promise<{ processedCampaignIds: string[] }> {
+    const dueCampaigns = await this.deps.campaignRepository.listDueScheduledCampaigns();
+    const outreachConfig = (this.deps.getOutreachConfig ?? getOutreachConfig)();
+
+    if (!outreachConfig.resendApiKey.trim()) {
+      return { processedCampaignIds: [] };
+    }
+
+    const processedCampaignIds: string[] = [];
+
+    for (const campaign of dueCampaigns) {
+      await this.deps.campaignRepository.updateStatus(campaign.id, "RUNNING", {
+        startedAt: new Date(),
+      });
+
+      const userId = campaign.userId;
+      this.deps.scheduleBackgroundTask(() =>
+        this.deps.campaignOrchestrator.sendCampaign(campaign.id, userId),
+      );
+      processedCampaignIds.push(campaign.id);
+    }
+
+    return { processedCampaignIds };
   }
 
   private mapCampaignSummary(campaign: {
@@ -199,12 +246,8 @@ export class CampaignApiService {
   }
 }
 
-let cachedService: CampaignApiService | undefined;
-
-export function getCampaignApiService(): CampaignApiService {
-  if (!cachedService) {
-    cachedService = new CampaignApiService();
-  }
-
-  return cachedService;
+export function createCampaignApiService(
+  deps: CampaignApiServiceDependencies,
+): CampaignApiService {
+  return new CampaignApiService(deps);
 }
