@@ -39,6 +39,7 @@ import {
   aggregateLlmReadyPages,
   type TextCleaningPort,
 } from "@/services/infrastructure/content/text-cleaning.service.js";
+import { runIntentDetectionForCompany } from "@/services/application/intent-detection-runner.service.js";
 import { promptSanitizerService } from "@/services/domain/content/prompt-sanitizer.service.js";
 import {
   SearchOrchestratorError,
@@ -640,6 +641,23 @@ export class SearchOrchestrator {
       stage: SearchResultStage.ENRICHED,
       completedAt: new Date(),
     });
+
+    const company = await this.deps.companyRepository.findById(companyId);
+
+    if (company) {
+      void runIntentDetectionForCompany({
+        companyId,
+        companyName: company.name ?? company.domain,
+        domain: company.domain,
+        website: company.websiteUrl ?? `https://${company.domain}`,
+        profile,
+      }).catch((error) => {
+        logger.warn("SearchOrchestrator intent detection failed", {
+          companyId,
+          message: error instanceof Error ? error.message : "Intent detection failed",
+        });
+      });
+    }
   }
 
   private buildLlmContent(crawlResult: CrawlCompanyResult): string {

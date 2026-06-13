@@ -8,5 +8,15 @@
     "app/api/**/*.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/refresh-leads",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/send-campaigns",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

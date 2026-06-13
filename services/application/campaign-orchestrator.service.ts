@@ -26,9 +26,11 @@ export class CampaignOrchestratorService {
       throw new Error("Campaign not found");
     }
 
-    await campaignRepository.updateStatus(campaignId, "RUNNING", {
-      startedAt: new Date(),
-    });
+    if (campaign.status !== "RUNNING") {
+      await campaignRepository.updateStatus(campaignId, "RUNNING", {
+        startedAt: new Date(),
+      });
+    }
 
     const pending = await campaignRepository.listPendingRecipients(campaignId);
     const delayMs = Math.ceil(60_000 / Math.max(1, config.sendRatePerMinute));

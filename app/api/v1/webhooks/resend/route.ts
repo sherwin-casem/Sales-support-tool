@@ -1,4 +1,7 @@
+import { ApiError } from "@/lib/api/api-error.js";
 import { jsonResponse } from "@/lib/api/http-response";
+import { getOutreachConfig } from "@/lib/config/outreach.config.js";
+import { verifyResendWebhookSignature } from "@/lib/security/resend-webhook.js";
 import { getCampaignRepository } from "@/repositories/prisma/campaign.repository";
 import type { RecipientStatus } from "@prisma/client";
 
@@ -20,7 +23,20 @@ const EVENT_STATUS_MAP: Record<string, RecipientStatus> = {
 };
 
 export async function POST(request: Request) {
-  const payload = (await request.json()) as ResendWebhookEvent;
+  const rawBody = await request.text();
+  const config = getOutreachConfig();
+
+  verifyResendWebhookSignature(
+    {
+      signature: request.headers.get("svix-signature"),
+      timestamp: request.headers.get("svix-timestamp"),
+      webhookId: request.headers.get("svix-id"),
+    },
+    rawBody,
+    config.resendWebhookSecret,
+  );
+
+  const payload = JSON.parse(rawBody) as ResendWebhookEvent;
   const providerId = payload.data?.email_id;
 
   if (!providerId) {
