@@ -1,13 +1,12 @@
-import { getAuthenticatedUserId } from "@/lib/api/auth";
-import { withApiHandler } from "@/lib/api/handler";
+import { requireUser, withApiHandler } from "@/lib/api/handler";
 import { jsonResponse } from "@/lib/api/http-response";
 import { readJsonBodyWithSchema } from "@/lib/api/parse-request";
 import { CreateSearchRequestSchema } from "@/lib/validations/api/search.schema";
 import { getSearchApiService } from "@/services/application/search-api.factory";
 
 const handleCreateSearch = withApiHandler(
-  async (request) => {
-    const userId = getAuthenticatedUserId(request);
+  async (request, context) => {
+    const userId = requireUser(context).id;
     const body = await readJsonBodyWithSchema(request, CreateSearchRequestSchema);
     const result = await getSearchApiService().createSearch(userId, body);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface DrawerProps {
@@ -47,7 +48,7 @@ export function Drawer({ open, onClose, title, children, className }: DrawerProp
       <button
         type="button"
         aria-label="Close company details"
-        className="absolute inset-0 bg-slate-900/40"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
         onClick={onClose}
       />
 
@@ -62,16 +63,17 @@ export function Drawer({ open, onClose, title, children, className }: DrawerProp
           className,
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
-          <h2 id={titleId} className="text-lg font-semibold text-slate-900">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-6 py-5">
+          <h2 id={titleId} className="text-lg font-semibold tracking-tight text-slate-900">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-200/80 hover:text-slate-700"
+            aria-label="Close"
           >
-            Close
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 

@@ -74,6 +74,15 @@ export class UserRepository {
     return mapUser(user);
   }
 
+  async organizationSlugExists(slug: string): Promise<boolean> {
+    const org = await getPrismaClient().organization.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+
+    return Boolean(org);
+  }
+
   async getOrganization(organizationId: string): Promise<OrganizationRecord | null> {
     const org = await getPrismaClient().organization.findUnique({
       where: { id: organizationId },

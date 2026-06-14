@@ -1,8 +1,10 @@
 "use client";
 
 import { useId } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Card } from "@/components/ui/Card";
 import {
   RESULTS_PAGE_SIZE_OPTIONS,
   RESULTS_SORT_OPTIONS,
@@ -29,10 +31,12 @@ export function ResultsToolbar({ view, onChange, disabled = false }: ResultsTool
   const pageSizeId = useId();
 
   return (
-    <section
-      aria-label="Filter and sort results"
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-    >
+    <Card padding="md" className="space-y-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+        <SlidersHorizontal className="h-4 w-4 text-slate-400" aria-hidden="true" />
+        Filter & sort
+      </div>
+      <section aria-label="Filter and sort results">
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <Input
           id={companyFilterId}
@@ -108,6 +112,7 @@ export function ResultsToolbar({ view, onChange, disabled = false }: ResultsTool
           ))}
         </Select>
       </div>
-    </section>
+      </section>
+    </Card>
   );
 }

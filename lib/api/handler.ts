@@ -180,4 +180,20 @@ function enforceRateLimit(
       );
     }
   }
+
+  if (context.method === "POST" && context.route === "/api/v1/auth/register") {
+    const registerLimiter = getRateLimiter(
+      "api-register",
+      security.API_REGISTER_RATE_LIMIT_MAX,
+      security.API_RATE_LIMIT_WINDOW_MS,
+    );
+    const registerResult = registerLimiter.consume(ip);
+
+    if (!registerResult.allowed) {
+      throw ApiError.rateLimited(
+        "Too many registration attempts",
+        registerResult.retryAfterSeconds,
+      );
+    }
+  }
 }

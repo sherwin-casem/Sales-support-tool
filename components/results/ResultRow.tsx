@@ -46,7 +46,7 @@ export const ResultRow = memo(function ResultRow({
   const hasDecisionMaker = !isDisplayEmpty(profile?.decisionMaker);
 
   return (
-    <tr className={cn("border-b border-slate-100 last:border-b-0", className)}>
+    <tr className={cn("border-b border-slate-100 transition-colors last:border-b-0 hover:bg-slate-50/80", className)}>
       <td className="px-4 py-4 align-top">
         <input
           type="checkbox"
@@ -106,7 +106,7 @@ export const ResultRow = memo(function ResultRow({
         <Button
           type="button"
           variant={isSaved ? "primary" : "secondary"}
-          className="px-3 py-1.5 text-xs"
+          size="sm"
           onClick={() => onToggleSave(result.company.id)}
           aria-pressed={isSaved}
         >

@@ -1,8 +1,10 @@
+import { Filter } from "lucide-react";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types.js";
 import type { PaginationMeta } from "@/types/api/pagination.api.types.js";
 import type { OpenResultDetailOptions } from "@/types/results/result-detail.types.js";
 import { ResultRow } from "@/components/results/ResultRow";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 
 interface ResultsListProps {
@@ -34,12 +36,11 @@ export function ResultsList({
   const someSelectedOnPage = items.some((item) => selectedIds.has(item.searchResultId));
   if (items.length === 0) {
     return (
-      <section className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-        <h2 className="text-lg font-medium text-slate-900">No results match your filters</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Try clearing the company filter or adjusting the pipeline stage.
-        </p>
-      </section>
+      <EmptyState
+        icon={Filter}
+        title="No results match your filters"
+        description="Try clearing the company filter or adjusting the pipeline stage."
+      />
     );
   }
 
@@ -49,7 +50,7 @@ export function ResultsList({
         Search results
       </h2>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto surface-card">
         <table className="min-w-[960px] w-full divide-y divide-slate-200">
           <caption className="sr-only">
             Search results with company details and save actions

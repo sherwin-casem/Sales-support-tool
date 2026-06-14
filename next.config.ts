@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
+const DEV_WATCH_IGNORE =
+  /[\\/](?:node_modules|\.git|\.next)(?:[\\/]|$)|System Volume Information|\$RECYCLE\.BIN/i;
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", "playwright"],
   webpack: (config, { dev }) => {
@@ -14,14 +17,10 @@ const nextConfig: NextConfig = {
       config.cache = false;
       config.watchOptions = {
         ...config.watchOptions,
-        ignored: [
-          "**/node_modules/**",
-          "**/.git/**",
-          "**/.next/**",
-          "**/System Volume Information/**",
-          "**/$RECYCLE.BIN/**",
-        ],
-        ...(process.platform === "win32" ? { poll: 1000 } : {}),
+        // Include folder names without trailing /** so paths like
+        // D:\System Volume Information are ignored before lstat runs.
+        ignored: DEV_WATCH_IGNORE,
+        followSymlinks: false,
       };
     }
 
