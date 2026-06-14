@@ -15,6 +15,11 @@ const securityConfigSchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => value === "true"),
+  ALLOW_PUBLIC_SIGNUP: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value !== "false"),
+  API_REGISTER_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),
   API_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1_000).default(60_000),
   API_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).default(60),
   API_SEARCH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),

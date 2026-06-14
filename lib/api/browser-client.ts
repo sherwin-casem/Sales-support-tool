@@ -1,7 +1,9 @@
 import { ApiClientError } from "@/lib/api/api-client-error";
 import type { ApiErrorBody } from "@/types/api/error.api.types";
+import type { RegisterRequestInput } from "@/lib/validations/api/auth.schema";
 import type { CreateSearchRequestInput } from "@/lib/validations/api/search.schema";
 import type { GetCompanyResponse } from "@/types/api/company.api.types";
+import type { RegisterResponse } from "@/types/api/auth.api.types";
 import type { CreateSearchResponse, GetSearchResponse } from "@/types/api/search.api.types";
 import type { GetSearchQueryInput } from "@/lib/validations/api/search.schema";
 
@@ -19,6 +21,25 @@ async function parseErrorResponse(response: Response): Promise<ApiClientError> {
   }
 
   throw new ApiClientError(response.status, body.error);
+}
+
+export async function registerRequest(
+  input: RegisterRequestInput,
+): Promise<RegisterResponse> {
+  const response = await fetch("/api/v1/auth/register", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    await parseErrorResponse(response);
+  }
+
+  return response.json() as Promise<RegisterResponse>;
 }
 
 export async function createSearchRequest(

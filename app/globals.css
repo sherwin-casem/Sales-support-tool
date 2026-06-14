@@ -1,12 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
   --color-brand-50: #eef2ff;
   --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
   --color-brand-500: #6366f1;
   --color-brand-600: #4f46e5;
   --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-nav-bg: #0f172a;
+
+  --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
+  --shadow-card-hover: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-panel: 0 10px 15px -3px rgb(15 23 42 / 0.08), 0 4px 6px -4px rgb(15 23 42 / 0.06);
+
+  --radius-card: 0.875rem;
+  --radius-button: 0.625rem;
 }
 
 @layer base {
@@ -20,5 +37,27 @@
 
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-brand-600;
+  }
+}
+
+@layer utilities {
+  .surface-card {
+    @apply rounded-[var(--radius-card)] border border-slate-200/80 bg-white shadow-[var(--shadow-card)];
+  }
+
+  .surface-panel {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[var(--shadow-panel)];
+  }
+
+  .text-muted {
+    @apply text-slate-500;
+  }
+
+  .nav-link-active {
+    @apply bg-brand-600/20 text-white ring-1 ring-brand-500/40;
+  }
+
+  .app-gradient-bg {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   }
 }

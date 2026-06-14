@@ -1,12 +1,11 @@
-import { getAuthenticatedUserId } from "@/lib/api/auth";
-import { withApiHandler, requireParams } from "@/lib/api/handler";
+import { requireUser, withApiHandler, requireParams } from "@/lib/api/handler";
 import { jsonResponse } from "@/lib/api/http-response";
 import { CompanyIdParamsSchema } from "@/lib/validations/api/company.schema";
 import { getCompanyApiService } from "@/services/application/company-api.factory";
 
 const handleGetCompany = withApiHandler(
   async (request, context) => {
-    const userId = getAuthenticatedUserId(request);
+    const userId = requireUser(context).id;
     const params = requireParams(context.params, CompanyIdParamsSchema);
     const result = await getCompanyApiService().getCompany(userId, params.id);
 

@@ -50,6 +50,10 @@ export default edgeAuth((request) => {
     if (pathname === "/login" && isLoggedIn) {
       return NextResponse.redirect(new URL("/search", request.nextUrl));
     }
+
+    if (pathname === "/register" && isLoggedIn) {
+      return NextResponse.redirect(new URL("/search", request.nextUrl));
+    }
   }
 
   return applySecurityHeaders(NextResponse.next(), request);

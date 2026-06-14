@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx scripts/dev-start.ts",
-    "dev:next": "node --max-old-space-size=4096 node_modules/next/dist/bin/next dev",
+    "dev:next": "tsx scripts/dev-start.ts --no-clean",
     "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && npm run dev",
     "build": "next build",
     "start": "next start",
@@ -47,6 +47,7 @@
   "dependencies": {
     "@prisma/client": "^6.9.0",
     "bcryptjs": "^2.4.3",
+    "lucide-react": "^1.18.0",
     "next": "^15.3.3",
     "next-auth": "^5.0.0-beta.25",
     "node-html-parser": "^7.0.1",

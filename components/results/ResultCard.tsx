@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 
 interface ResultCardProps {
   result: SearchResultItemResponse;
@@ -14,20 +16,23 @@ export function ResultCard({ result }: ResultCardProps) {
     (result.profile?.industry ? `${result.profile.industry} company` : null);
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="min-w-0 space-y-1">
+    <Card hover padding="md" className="h-full">
+      <div className="min-w-0 space-y-2">
         <Link
           href={`/companies/${result.company.id}`}
-          className="block truncate font-medium text-slate-900 hover:text-brand-600"
+          className="block truncate text-base font-semibold text-slate-900 hover:text-brand-600"
         >
           {companyLabel}
         </Link>
         <p className="truncate text-sm text-slate-500">{result.company.domain}</p>
+        {result.profile?.industry ? (
+          <Badge variant="brand">{result.profile.industry}</Badge>
+        ) : null}
       </div>
 
-      <p className="mt-3 text-sm leading-6 text-slate-600">
+      <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
         {summary ?? "Profile details not available yet."}
       </p>
-    </article>
+    </Card>
   );
 }

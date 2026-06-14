@@ -1,5 +1,4 @@
-import { getAuthenticatedUserId } from "@/lib/api/auth";
-import { withApiHandler, requireParams } from "@/lib/api/handler";
+import { requireUser, withApiHandler, requireParams } from "@/lib/api/handler";
 import { jsonResponse } from "@/lib/api/http-response";
 import { parseQueryParamsWithSchema } from "@/lib/api/parse-request";
 import {
@@ -10,7 +9,7 @@ import { getSearchApiService } from "@/services/application/search-api.factory";
 
 const handleGetSearch = withApiHandler(
   async (request, context) => {
-    const userId = getAuthenticatedUserId(request);
+    const userId = requireUser(context).id;
     const params = requireParams(context.params, SearchIdParamsSchema);
     const query = parseQueryParamsWithSchema(request, GetSearchQuerySchema);
     const result = await getSearchApiService().getSearch(userId, params.id, query);

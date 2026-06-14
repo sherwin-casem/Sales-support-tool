@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { CompanyHeader } from "@/components/company/CompanyHeader";
 import { CompanyProfilePanel } from "@/components/company/CompanyProfilePanel";
 import { CrawlHistoryTimeline } from "@/components/company/CrawlHistoryTimeline";
@@ -41,10 +43,14 @@ export function CompanyDetailContent({ companyId }: CompanyDetailContentProps) {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <Link href="/search" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-          ← Back to search
+        <Link
+          href="/search"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to search
         </Link>
       </div>
 
@@ -59,12 +65,12 @@ export function CompanyDetailContent({ companyId }: CompanyDetailContentProps) {
                 <ExtractedInformation data={data.profile.data} />
               </>
             ) : (
-              <section className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm">
+              <Card className="text-center">
                 <h2 className="text-lg font-medium text-slate-900">Profile not available</h2>
                 <p className="mt-2 text-sm text-slate-600">
                   This company has been discovered but extraction is still pending or failed.
                 </p>
-              </section>
+              </Card>
             )}
 
             <CrawlHistoryTimeline company={data} />
@@ -89,11 +95,11 @@ function RecentSearchesPanel({
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <Card>
       <h2 className="text-lg font-semibold text-slate-900">Recent searches</h2>
       <ul className="mt-4 space-y-3">
         {company.recentSearches.map((appearance) => (
-          <li key={appearance.searchResultId} className="rounded-xl bg-slate-50 p-3">
+          <li key={appearance.searchResultId} className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-100">
             <Link
               href={`/search/${appearance.searchJobId}`}
               className="text-sm font-medium text-brand-600 hover:text-brand-700"
@@ -104,7 +110,7 @@ function RecentSearchesPanel({
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }
 
