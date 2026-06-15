@@ -2,6 +2,7 @@ import type { OutreachChannel } from "@prisma/client";
 import {
   isPersonalLinkedInUrl,
   normalizeToE164Phone,
+  validateEmail,
   validatePersonalEmail,
 } from "@/lib/validations/lead-contact.validation.js";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
@@ -25,7 +26,7 @@ export function resolveRecipientForChannel(
     case "EMAIL": {
       const email =
         validatePersonalEmail(profile.decisionMakerEmail, profile.email) ??
-        validatePersonalEmail(profile.email);
+        validateEmail(profile.email);
 
       if (!email) {
         return null;
@@ -64,7 +65,7 @@ export function getRecipientMissingContactMessage(
 ): string {
   switch (channel) {
     case "EMAIL":
-      return `No valid personal email for company ${domain}`;
+      return `No valid email for company ${domain}`;
     case "WHATSAPP":
       return `No valid phone number for company ${domain}`;
     case "LINKEDIN":
