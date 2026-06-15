@@ -79,19 +79,17 @@ export function AppNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-6">
-          <Link href="/search" className="shrink-0">
-            <Logo variant="light" />
-          </Link>
+        <Link href="/search" className="shrink-0">
+          <Logo variant="light" />
+        </Link>
 
+        <div className="flex items-center gap-4">
           <nav className="hidden items-center gap-1 md:flex">
             {allLinks.map((link) => (
               <NavLink key={link.href} {...link} />
             ))}
           </nav>
-        </div>
 
-        <div className="flex items-center gap-2">
           {session?.user ? (
             <DropdownMenu
               trigger={

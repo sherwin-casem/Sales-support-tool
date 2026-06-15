@@ -1,10 +1,13 @@
-import { validatePersonalEmail } from "@/lib/validations/lead-contact.validation.js";
+import {
+  validateEmail,
+  validatePersonalEmail,
+} from "@/lib/validations/lead-contact.validation.js";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 
 export function resolveRecipientEmail(profile: ExtractedCompany): string | null {
   return (
     validatePersonalEmail(profile.decisionMakerEmail, profile.email) ??
-    validatePersonalEmail(profile.email)
+    validateEmail(profile.email)
   );
 }
 

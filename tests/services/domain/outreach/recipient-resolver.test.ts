@@ -50,7 +50,27 @@ describe("resolveRecipientForChannel", () => {
     expect(resolveRecipientForChannel(profile, "LINKEDIN")).toBeNull();
   });
 
+  it("falls back to company email when no personal email exists", () => {
+    const profile = {
+      ...baseProfile,
+      decisionMakerEmail: null,
+      email: "info@acme.com",
+    };
+    const resolved = resolveRecipientForChannel(profile, "EMAIL");
+    expect(resolved?.toAddress).toBe("info@acme.com");
+  });
+
+  it("returns null for invalid company email fallback", () => {
+    const profile = {
+      ...baseProfile,
+      decisionMakerEmail: null,
+      email: "contact@example.com",
+    };
+    expect(resolveRecipientForChannel(profile, "EMAIL")).toBeNull();
+  });
+
   it("builds channel-specific error messages", () => {
+    expect(getRecipientMissingContactMessage("EMAIL", "acme.com")).toContain("email");
     expect(getRecipientMissingContactMessage("WHATSAPP", "acme.com")).toContain("phone");
   });
 });
