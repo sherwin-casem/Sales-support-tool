@@ -1,0 +1,63 @@
+import { useId } from "react";
+import { cn } from "@/lib/utils/cn";
+
+interface ParijatGearIconProps {
+  className?: string;
+}
+
+const GEAR_PATH =
+  "M 32.66,11.01 L 36.52,4.37 L 41.90,5.81 L 41.92,13.49 L 43.07,14.15 L 49.73,10.33 L 53.67,14.27 L 49.85,20.93 L 50.51,22.08 L 58.19,22.10 L 59.63,27.48 L 52.99,31.34 L 52.99,32.66 L 59.63,36.52 L 58.19,41.90 L 50.51,41.92 L 49.85,43.07 L 53.67,49.73 L 49.73,53.67 L 43.07,49.85 L 41.92,50.51 L 41.90,58.19 L 36.52,59.63 L 32.66,52.99 L 31.34,52.99 L 27.48,59.63 L 22.10,58.19 L 22.08,50.51 L 20.93,49.85 L 14.27,53.67 L 10.33,49.73 L 14.15,43.07 L 13.49,41.92 L 5.81,41.90 L 4.37,36.52 L 11.01,32.66 L 11.01,31.34 L 4.37,27.48 L 5.81,22.10 L 13.49,22.08 L 14.15,20.93 L 10.33,14.27 L 14.27,10.33 L 20.93,14.15 L 22.08,13.49 L 22.10,5.81 L 27.48,4.37 L 31.34,11.01 Z";
+
+const HUB_PATH =
+  "M32,18 A14,14 0 1,1 31.99,18 L32,21 A11,11 0 1,0 32.01,21 Z";
+
+const HOLE_PATH = "M40,32 A8,8 0 1,1 24,32 A8,8 0 1,1 40,32 Z";
+
+export function ParijatGearIcon({ className }: ParijatGearIconProps) {
+  const uid = useId().replace(/:/g, "");
+  const bodyGradient = `parijat-body-${uid}`;
+  const hubGradient = `parijat-hub-${uid}`;
+
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn("h-9 w-9 shrink-0", className)}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id={bodyGradient} x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="45%" stopColor="#D1D5DB" />
+          <stop offset="100%" stopColor="#9CA3AF" />
+        </linearGradient>
+        <linearGradient id={hubGradient} x1="18" y1="18" x2="46" y2="46" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#F3F4F6" />
+          <stop offset="100%" stopColor="#6B7280" />
+        </linearGradient>
+      </defs>
+
+      <rect width="64" height="64" rx="12" fill="#000000" />
+
+      <path
+        d={`${GEAR_PATH} ${HOLE_PATH}`}
+        fill={`url(#${bodyGradient})`}
+        fillRule="evenodd"
+        stroke="#4B5563"
+        strokeWidth="0.75"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d={HUB_PATH}
+        fill={`url(#${hubGradient})`}
+        fillRule="evenodd"
+        stroke="#6B7280"
+        strokeWidth="0.5"
+      />
+
+      <circle cx="32" cy="32" r="8" fill="#000000" />
+    </svg>
+  );
+}

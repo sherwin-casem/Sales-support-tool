@@ -1,6 +1,6 @@
 import type { OutreachChannel } from "@prisma/client";
-import { isPersonalLinkedInUrl } from "@/services/domain/enrichment/decision-maker-contact.service.js";
 import {
+  isPersonalLinkedInUrl,
   normalizeToE164Phone,
   validatePersonalEmail,
 } from "@/lib/validations/lead-contact.validation.js";

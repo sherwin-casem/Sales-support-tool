@@ -420,6 +420,15 @@ export function validatePhone(value: string | null | undefined): string | null {
   return formatPhoneForDisplay(trimmed);
 }
 
+export function isPersonalLinkedInUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.toLowerCase().startsWith("/in/");
+  } catch {
+    return false;
+  }
+}
+
 /** Normalizes a validated phone to compact E.164 (+digits) for WhatsApp/API delivery. */
 export function normalizeToE164Phone(value: string | null | undefined): string | null {
   const validated = validatePhone(value);
