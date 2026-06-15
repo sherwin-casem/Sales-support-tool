@@ -140,7 +140,7 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
 
   if (isLoading) {
     return (
-      <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
         <ResultsSkeleton />
       </main>
     );
@@ -148,9 +148,9 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
 
   if (error || !data) {
     return (
-      <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
         <Alert title="Unable to load results">{error ?? "Search job not found."}</Alert>
-        <div className="mt-4 flex gap-3">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           <Button type="button" onClick={() => void reload()}>
             Retry
           </Button>
@@ -163,24 +163,24 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-6">
+    <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+      <div className="mb-4 sm:mb-6">
         <Button type="button" variant="ghost" className="px-0" onClick={handleBack}>
           ← Back
         </Button>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <SearchJobHeader job={data} isRefreshing={isRefreshing} />
 
         <ResultsToolbar view={view} onChange={updateView} />
 
         {selectedSearchResultIds.size > 0 ? (
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+          <section className="flex flex-col gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-medium text-brand-900">
               {selectedSearchResultIds.size} lead{selectedSearchResultIds.size === 1 ? "" : "s"} selected
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button
                 type="button"
                 variant="secondary"
@@ -233,11 +233,14 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
 
 function ResultsSkeleton() {
   return (
-    <div className="animate-pulse space-y-6">
+    <div className="animate-pulse space-y-4 sm:space-y-6">
       <div className="h-8 w-2/3 rounded-lg bg-slate-200" />
-      <div className="h-24 rounded-2xl bg-slate-200" />
-      <div className="h-40 rounded-2xl bg-slate-200" />
-      <div className="h-72 rounded-2xl bg-slate-200" />
+      <div className="h-20 rounded-2xl bg-slate-200 sm:h-24" />
+      <div className="space-y-3 lg:hidden">
+        <div className="h-44 rounded-2xl bg-slate-200" />
+        <div className="h-44 rounded-2xl bg-slate-200" />
+      </div>
+      <div className="hidden h-72 rounded-2xl bg-slate-200 lg:block" />
     </div>
   );
 }
