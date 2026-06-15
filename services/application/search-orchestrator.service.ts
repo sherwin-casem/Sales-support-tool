@@ -28,6 +28,8 @@ import {
 } from "@/services/domain/enrichment/decision-maker-contact.service.js";
 import { hasOutreachContactGaps } from "@/services/domain/enrichment/outreach-gaps.service.js";
 import { mergeExtractedProfiles } from "@/services/domain/enrichment/profile-merge.service.js";
+import type { ContactlessLeadRemovalService } from "@/services/application/contactless-lead-removal.service.js";
+import { hasAnyLeadContactDetails } from "@/lib/results/lead-contact-eligibility.js";
 import type { SearchResultRecord } from "@/types/repositories/search.repository.types.js";
 import type { CompanyDiscoveryPort } from "@/services/infrastructure/discovery/company-discovery.service.js";
 import type { CompanyExtractionPort } from "@/services/infrastructure/ai/company-extraction.service.js";
@@ -58,6 +60,7 @@ export interface SearchOrchestratorDependencies {
   leadEnrichment: LeadEnrichmentPort;
   searchRepository: SearchRepository;
   companyRepository: CompanyRepository;
+  contactlessLeadRemoval: ContactlessLeadRemovalService;
 }
 
 export interface SearchOrchestratorOptions {
@@ -455,6 +458,15 @@ export class SearchOrchestrator {
 
     currentProfile = sanitizeLeadContacts(currentProfile);
 
+    if (!hasAnyLeadContactDetails(currentProfile)) {
+      return this.removeContactlessLead(
+        searchResult,
+        companyId,
+        currentProfile,
+        "No company or decision-maker contact information found",
+      );
+    }
+
     const completeness = computeExtractionCompleteness(currentProfile);
 
     if (completeness < this.minProfileCompleteness) {
@@ -683,6 +695,36 @@ export class SearchOrchestrator {
     return promptSanitizerService.sanitizeCrawlContent(
       aggregateLlmReadyPages(cleanedPages),
     );
+  }
+
+  private async removeContactlessLead(
+    searchResult: SearchResultRecord,
+    companyId: string,
+    profile: ExtractedCompany,
+    message: string,
+  ): Promise<StageOutcome> {
+    logger.info("SearchOrchestrator removing contactless lead", {
+      searchResultId: searchResult.id,
+      companyId,
+      message,
+    });
+
+    await this.deps.contactlessLeadRemoval.removeContactlessLead(companyId, profile, message);
+
+    return {
+      crawled: 0,
+      extracted: 0,
+      enriched: 0,
+      removed: 1,
+      failed: 0,
+      failures: [
+        {
+          companyId,
+          stage: "REMOVED",
+          message,
+        },
+      ],
+    };
   }
 
   private async removeUnenrichedLead(

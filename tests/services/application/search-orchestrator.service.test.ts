@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { QueryParserError, LeadEnrichmentError } from "@/types/agents/agent-error.types.js";
 import { WebsiteCrawlerError } from "@/types/crawler/crawler-error.types.js";
 import { SearchOrchestrator } from "@/services/application/search-orchestrator.service.js";
+import { ContactlessLeadRemovalService } from "@/services/application/contactless-lead-removal.service.js";
 import { ok, err } from "@/lib/utils/result.js";
 import type { SearchOrchestratorDependencies } from "@/services/application/search-orchestrator.service.js";
 
@@ -51,6 +52,32 @@ function createDependencies(
     createdAt: new Date("2026-06-07T12:00:00.000Z"),
     updatedAt: new Date("2026-06-07T12:00:00.000Z"),
   };
+
+  const companyRepository = {
+      findById: vi.fn().mockResolvedValue(company),
+      findByNormalizedDomain: vi.fn(),
+      upsertByDomain: vi.fn(),
+      upsertManyByDomain: vi.fn(),
+      saveProfile: vi.fn().mockResolvedValue({
+        profile: {
+          id: "00000000-0000-4000-8000-000000000020",
+          companyId,
+          version: 1,
+          structuredData: extractedProfile,
+          completeness: 0.9,
+          modelUsed: "gpt-4o",
+          promptVersion: "v1",
+          contentHash: "hash-123",
+          extractedAt: new Date("2026-06-07T12:00:00.000Z"),
+          createdAt: new Date("2026-06-07T12:00:00.000Z"),
+          updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+        },
+        created: true,
+      }),
+      findLatestProfile: vi.fn(),
+      markCrawled: vi.fn().mockResolvedValue({ ...company, lastCrawledAt: new Date("2026-06-07T12:01:00.000Z") }),
+      deleteCompanyAndSearchResults: vi.fn().mockResolvedValue({ deletedSearchResults: 1 }),
+    };
 
   return {
     queryParser: {
@@ -205,30 +232,8 @@ function createDependencies(
       deleteResult: vi.fn().mockResolvedValue(undefined),
       findResultById: vi.fn(),
     },
-    companyRepository: {
-      findById: vi.fn().mockResolvedValue(company),
-      findByNormalizedDomain: vi.fn(),
-      upsertByDomain: vi.fn(),
-      upsertManyByDomain: vi.fn(),
-      saveProfile: vi.fn().mockResolvedValue({
-        profile: {
-          id: "00000000-0000-4000-8000-000000000020",
-          companyId,
-          version: 1,
-          structuredData: extractedProfile,
-          completeness: 0.9,
-          modelUsed: "gpt-4o",
-          promptVersion: "v1",
-          contentHash: "hash-123",
-          extractedAt: new Date("2026-06-07T12:00:00.000Z"),
-          createdAt: new Date("2026-06-07T12:00:00.000Z"),
-          updatedAt: new Date("2026-06-07T12:00:00.000Z"),
-        },
-        created: true,
-      }),
-      findLatestProfile: vi.fn(),
-      markCrawled: vi.fn().mockResolvedValue({ ...company, lastCrawledAt: new Date("2026-06-07T12:01:00.000Z") }),
-    },
+    companyRepository,
+    contactlessLeadRemoval: new ContactlessLeadRemovalService(companyRepository),
     ...overrides,
   };
 }
@@ -333,8 +338,8 @@ describe("SearchOrchestrator", () => {
       ok({
         profile: createExtractedCompanyProfile({
           decisionMaker: "unknown",
-          linkedInUrl: null,
-          email: null,
+          email: "info@acme.fi",
+          linkedInUrl: "https://linkedin.com/company/acme",
         }),
         meta: {
           promptVersion: "v1",
@@ -392,7 +397,7 @@ describe("SearchOrchestrator", () => {
       country: "unknown",
       decisionMaker: "unknown",
       linkedInUrl: null,
-      email: null,
+      email: "info@acme.fi",
       revenue: "unknown",
     });
 
@@ -439,6 +444,63 @@ describe("SearchOrchestrator", () => {
 
     expect(deps.searchRepository.deleteResult).toHaveBeenCalledWith(searchResultId);
     expect(deps.companyRepository.saveProfile).not.toHaveBeenCalled();
+  });
+
+  it("removes the company when enrichment succeeds but contact details are missing", async () => {
+    const contactlessProfile = createExtractedCompanyProfile({
+      description: "Freight and warehousing provider in Finland.",
+      industry: "logistics",
+      products: ["Tracking Platform"],
+      services: ["Freight forwarding"],
+      targetCustomers: ["Manufacturers"],
+      estimatedCompanySize: "100-200",
+      city: "helsinki",
+      country: "finland",
+      decisionMaker: "Jane Doe, CEO",
+      decisionMakerEmail: null,
+      decisionMakerPhone: null,
+      decisionMakerLinkedInUrl: null,
+      linkedInUrl: null,
+      xUrl: null,
+      email: null,
+      phone: null,
+      revenue: "unknown",
+    });
+
+    const deps = createDependencies();
+    deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
+      ok({
+        profile: contactlessProfile,
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          enrichedAt: "2026-06-07T12:02:00.000Z",
+        },
+      }),
+    );
+
+    const orchestrator = new SearchOrchestrator(deps, {
+      minProfileCompleteness: 0.35,
+    });
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.status).toBe("FAILED");
+      expect(result.value.summary.enriched).toBe(0);
+      expect(result.value.summary.removed).toBe(1);
+      expect(result.value.failures[0]?.message).toContain(
+        "No company or decision-maker contact information found",
+      );
+    }
+
+    expect(deps.companyRepository.deleteCompanyAndSearchResults).toHaveBeenCalledWith(companyId);
+    expect(deps.companyRepository.saveProfile).not.toHaveBeenCalled();
+    expect(deps.searchRepository.deleteResult).not.toHaveBeenCalled();
   });
 
   it("removes the search result when web enrichment and crawl fallback both fail", async () => {
@@ -542,6 +604,22 @@ describe("SearchOrchestrator", () => {
         },
       }),
     );
+    deps.companyExtraction.extract = vi.fn().mockResolvedValue(
+      ok({
+        profile: createExtractedCompanyProfile({
+          decisionMaker: "Jane Doe, CEO",
+          decisionMakerEmail: "jane@acme.fi",
+          email: "info@acme.fi",
+        }),
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          contentHash: "hash-contact",
+          extractedAt: "2026-06-07T12:01:00.000Z",
+          completeness: 0.8,
+        },
+      }),
+    );
     deps.companyDiscovery.discover = vi.fn().mockResolvedValue(
       ok(
         companyIds.map((_, index) => ({
@@ -611,13 +689,13 @@ describe("SearchOrchestrator", () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.value.summary.crawled).toBe(8);
-      expect(result.value.summary.extracted).toBe(8);
+      expect(result.value.summary.crawled).toBe(4);
+      expect(result.value.summary.extracted).toBe(4);
       expect(result.value.summary.enriched).toBe(4);
       expect(maxActiveCrawls).toBe(3);
     }
 
-    expect(deps.websiteCrawler.crawl).toHaveBeenCalledTimes(8);
+    expect(deps.websiteCrawler.crawl).toHaveBeenCalledTimes(4);
   });
 
   it("enriches multiple companies in parallel", async () => {

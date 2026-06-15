@@ -18,6 +18,7 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:prepare-users": "tsx scripts/fix-parijat-db.ts",
+    "prune:contactless": "tsx scripts/prune-contactless-leads.ts",
     "prepare:local": "tsx scripts/prepare-local.ts",
     "predev": "npm run db:generate",
     "db:studio": "prisma studio",

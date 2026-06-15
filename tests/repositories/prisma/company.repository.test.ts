@@ -178,4 +178,24 @@ describe("PrismaCompanyRepository", () => {
 
     expect(result.lastCrawledAt).toEqual(crawledAt);
   });
+
+  it("deletes search results before deleting the company", async () => {
+    const prisma = createMockPrismaClient();
+    const company = createMockCompany();
+
+    prisma.searchResult.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.company.delete.mockResolvedValue(company);
+
+    const repository = new PrismaCompanyRepository(prisma);
+    const result = await repository.deleteCompanyAndSearchResults(company.id);
+
+    expect(result.deletedSearchResults).toBe(2);
+
+    expect(prisma.searchResult.deleteMany).toHaveBeenCalledWith({
+      where: { companyId: company.id },
+    });
+    expect(prisma.company.delete).toHaveBeenCalledWith({
+      where: { id: company.id },
+    });
+  });
 });
