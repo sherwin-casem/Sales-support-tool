@@ -1,5 +1,6 @@
 import { SearchJobStatus, SearchResultStage } from "@prisma/client";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
+import { hasParsedCriteria } from "@/lib/search/parsed-criteria.js";
 import { getEnrichmentDeficit, isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
 import { computeExtractionCompleteness } from "@/lib/validations/company-extraction.schema.js";
 import { logger } from "@/lib/logging/logger.js";
@@ -42,6 +43,10 @@ import {
   type TextCleaningPort,
 } from "@/services/infrastructure/content/text-cleaning.service.js";
 import { runIntentDetectionForCompany } from "@/services/application/intent-detection-runner.service.js";
+import {
+  isSearchJobCancelled,
+  SearchJobControlSignal,
+} from "@/services/application/search-job-control.js";
 import { promptSanitizerService } from "@/services/domain/content/prompt-sanitizer.service.js";
 import {
   SearchOrchestratorError,
@@ -165,20 +170,31 @@ export class SearchOrchestrator {
 
       searchJobId = job.id;
 
-      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.DISCOVERING, {
-        startedAt: new Date(),
-      });
-
-      const criteriaResult = await this.parseQuery(input.query);
-
-      if (!criteriaResult.ok) {
-        await this.failJob(searchJobId, criteriaResult.error.message);
-        return err(criteriaResult.error);
+      if (job.status === SearchJobStatus.CANCELLED) {
+        return ok(this.buildInterruptedResult(searchJobId, job.criteria, summary, failures, startedAt));
       }
 
-      const criteria = criteriaResult.value;
+      await this.assertJobShouldContinue(searchJobId);
 
-      await this.deps.searchRepository.updateJobCriteria(searchJobId, criteria);
+      let criteria: ParsedQuery;
+
+      if (hasParsedCriteria(job.criteria)) {
+        criteria = job.criteria;
+      } else {
+        await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.DISCOVERING, {
+          startedAt: new Date(),
+        });
+
+        const criteriaResult = await this.parseQuery(input.query);
+
+        if (!criteriaResult.ok) {
+          await this.failJob(searchJobId, criteriaResult.error.message);
+          return err(criteriaResult.error);
+        }
+
+        criteria = criteriaResult.value;
+        await this.deps.searchRepository.updateJobCriteria(searchJobId, criteria);
+      }
 
       const companyLimit = input.companyLimit ?? job.companyLimit;
 
@@ -188,7 +204,7 @@ export class SearchOrchestrator {
             searchJobId,
             input.query,
             criteria,
-            companyLimit,
+            companyLimit as number,
             summary,
             failures,
           );
@@ -198,8 +214,13 @@ export class SearchOrchestrator {
         return err(pipelineResult.error);
       }
 
+      await this.assertJobShouldContinue(searchJobId);
+
+      const stageCounts = await this.deps.searchRepository.countResultsByStage(searchJobId);
+      const enrichedTotal = stageCounts.ENRICHED ?? 0;
+
       const finalStatus =
-        summary.enriched > 0
+        enrichedTotal > 0
           ? SearchJobStatus.COMPLETED
           : SearchJobStatus.FAILED;
 
@@ -229,6 +250,36 @@ export class SearchOrchestrator {
         durationMs,
       });
     } catch (error) {
+      if (error instanceof SearchJobControlSignal && searchJobId) {
+        const durationMs = Date.now() - startedAt;
+        const job = await this.deps.searchRepository.findJobById(searchJobId);
+        const criteria = job && hasParsedCriteria(job.criteria) ? job.criteria : {
+          industry: "unknown",
+          location: "unknown",
+          employeeRange: "unknown",
+        };
+
+        await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.CANCELLED, {
+          completedAt: new Date(),
+          errorMessage: "Search stopped by user",
+        });
+
+        logger.info("SearchOrchestrator.run cancelled", {
+          searchJobId,
+          durationMs,
+          summary,
+        });
+
+        return ok({
+          searchJobId,
+          status: SearchJobStatus.CANCELLED,
+          criteria,
+          summary,
+          failures,
+          durationMs,
+        });
+      }
+
       const durationMs = Date.now() - startedAt;
       const message = error instanceof Error ? error.message : "Search orchestration failed";
 
@@ -246,6 +297,45 @@ export class SearchOrchestrator {
         new SearchOrchestratorError("ORCHESTRATION_FAILED", message, error),
       );
     }
+  }
+
+  private async assertJobShouldContinue(searchJobId: string): Promise<void> {
+    const job = await this.deps.searchRepository.findJobById(searchJobId);
+
+    if (!job || isSearchJobCancelled(job.status)) {
+      throw new SearchJobControlSignal();
+    }
+  }
+
+  private async processLeadWithControl(
+    searchJobId: string,
+    searchResult: SearchResultRecord,
+  ): Promise<StageOutcome> {
+    await this.assertJobShouldContinue(searchJobId);
+    return this.processLeadHybrid(searchResult);
+  }
+
+  private buildInterruptedResult(
+    searchJobId: string,
+    criteria: ParsedQuery | Record<string, unknown>,
+    summary: SearchOrchestrationSummary,
+    failures: SearchStageFailure[],
+    startedAt: number,
+  ): SearchOrchestrationResult {
+    return {
+      searchJobId,
+      status: SearchJobStatus.CANCELLED,
+      criteria: hasParsedCriteria(criteria)
+        ? criteria
+        : {
+            industry: "unknown",
+            location: "unknown",
+            employeeRange: "unknown",
+          },
+      summary,
+      failures,
+      durationMs: Date.now() - startedAt,
+    };
   }
 
   private async parseQuery(
@@ -273,6 +363,41 @@ export class SearchOrchestrator {
     summary: SearchOrchestrationSummary,
     failures: SearchStageFailure[],
   ): Promise<Result<void, SearchOrchestratorError>> {
+    const existingResults = await this.deps.searchRepository.findResultsByJobId(searchJobId);
+
+    if (existingResults.length > 0) {
+      summary.discovered = existingResults.length;
+
+      const pendingResults = existingResults.filter(
+        (result) => result.stage !== SearchResultStage.ENRICHED,
+      );
+
+      if (pendingResults.length === 0) {
+        return ok(undefined);
+      }
+
+      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.ENRICHING);
+
+      logger.info("SearchOrchestrator resuming hybrid enrichment stage", {
+        searchJobId,
+        companyCount: pendingResults.length,
+        enrichmentConcurrency: this.enrichmentConcurrency,
+      });
+
+      const enrichmentOutcomes = await runWithConcurrency(
+        pendingResults,
+        this.enrichmentConcurrency,
+        (searchResult) => this.processLeadWithControl(searchJobId, searchResult),
+      );
+
+      mergeStageOutcomes(summary, failures, enrichmentOutcomes);
+      await this.assertJobShouldContinue(searchJobId);
+
+      return ok(undefined);
+    }
+
+    await this.assertJobShouldContinue(searchJobId);
+
     const discoveriesResult = await this.discoverCompanies(query, criteria, null);
 
     if (!discoveriesResult.ok) {
@@ -315,10 +440,11 @@ export class SearchOrchestrator {
     const enrichmentOutcomes = await runWithConcurrency(
       searchResults,
       this.enrichmentConcurrency,
-      (searchResult) => this.processLeadHybrid(searchResult),
+      (searchResult) => this.processLeadWithControl(searchJobId, searchResult),
     );
 
     mergeStageOutcomes(summary, failures, enrichmentOutcomes);
+    await this.assertJobShouldContinue(searchJobId);
 
     return ok(undefined);
   }
@@ -332,11 +458,26 @@ export class SearchOrchestrator {
     failures: SearchStageFailure[],
   ): Promise<Result<void, SearchOrchestratorError>> {
     const maxAttempts = targetLimit * this.discoveryTargetMaxAttemptMultiplier;
+    const existingResults = await this.deps.searchRepository.findResultsByJobId(searchJobId);
+    const highestRank = existingResults.reduce(
+      (max, result) => Math.max(max, result.rank ?? 0),
+      0,
+    );
     const attemptedWebsites: string[] = [];
-    let totalAttempted = 0;
-    let nextRank = 1;
+    let totalAttempted = existingResults.length;
+    let nextRank = highestRank > 0 ? highestRank + 1 : 1;
+
+    for (const result of existingResults) {
+      const company = await this.deps.companyRepository.findById(result.companyId);
+
+      if (company?.websiteUrl) {
+        attemptedWebsites.push(company.websiteUrl);
+      }
+    }
 
     for (let round = 0; round < this.discoveryTargetMaxRounds; round += 1) {
+      await this.assertJobShouldContinue(searchJobId);
+
       const stageCounts = await this.deps.searchRepository.countResultsByStage(searchJobId);
       const enrichedCount = stageCounts.ENRICHED ?? 0;
 
@@ -423,11 +564,13 @@ export class SearchOrchestrator {
       const enrichmentOutcomes = await runWithConcurrency(
         toEnrich,
         this.enrichmentConcurrency,
-        (searchResult) => this.processLeadHybrid(searchResult),
+        (searchResult) => this.processLeadWithControl(searchJobId, searchResult),
       );
 
       mergeStageOutcomes(summary, failures, enrichmentOutcomes);
     }
+
+    await this.assertJobShouldContinue(searchJobId);
 
     return ok(undefined);
   }

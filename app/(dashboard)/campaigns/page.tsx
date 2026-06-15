@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { Mail, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  buildCampaignsPageItems,
+  CampaignsPageList,
+} from "@/components/campaigns/CampaignsPageList";
 import { apiFetch } from "@/lib/api/browser-client";
-import { channelLabel } from "@/lib/outreach/channel-labels";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SkeletonCard } from "@/components/ui/Skeleton";
+import { Alert } from "@/components/ui/Alert";
+import type { ListSavedSearchesResponse } from "@/types/api/saved-search.api.types.js";
 
 interface CampaignSummary {
   id: string;
@@ -21,31 +24,57 @@ interface CampaignSummary {
   createdAt: string;
 }
 
-function statusVariant(status: string): "default" | "success" | "warning" | "info" | "error" {
-  switch (status) {
-    case "COMPLETED":
-      return "success";
-    case "RUNNING":
-    case "SCHEDULED":
-      return "info";
-    case "FAILED":
-      return "error";
-    case "PAUSED":
-      return "warning";
-    default:
-      return "default";
-  }
-}
-
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
+  const [savedSearches, setSavedSearches] = useState<ListSavedSearchesResponse["data"]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [campaignResponse, savedSearchResponse] = await Promise.all([
+        apiFetch<{ data: CampaignSummary[] }>("/api/v1/campaigns"),
+        apiFetch<ListSavedSearchesResponse>("/api/v1/saved-searches"),
+      ]);
+
+      setCampaigns(campaignResponse.data);
+      setSavedSearches(savedSearchResponse.data);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load campaigns.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void apiFetch<{ data: CampaignSummary[] }>("/api/v1/campaigns")
-      .then((response) => setCampaigns(response.data))
-      .finally(() => setLoading(false));
-  }, []);
+    void reload();
+  }, [reload]);
+
+  const items = useMemo(
+    () => buildCampaignsPageItems(campaigns, savedSearches),
+    [campaigns, savedSearches],
+  );
+
+  const handleDeleteSavedSearch = useCallback(
+    async (savedSearchId: string) => {
+      setDeletingId(savedSearchId);
+      setError(null);
+
+      try {
+        await apiFetch(`/api/v1/saved-searches/${savedSearchId}`, { method: "DELETE" });
+        setSavedSearches((current) => current.filter((item) => item.id !== savedSearchId));
+      } catch (deleteError) {
+        setError(deleteError instanceof Error ? deleteError.message : "Failed to delete saved search.");
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [],
+  );
 
   return (
     <main className="px-4 py-10 sm:px-6 lg:px-8">
@@ -53,7 +82,7 @@ export default function CampaignsPage() {
         <PageHeader
           eyebrow="Outreach"
           title="Campaigns"
-          description="Multi-channel outreach and delivery tracking for your organization."
+          description="Saved searches and multi-channel outreach for your organization."
           actions={
             <Link href="/search">
               <Button leftIcon={<Plus className="h-4 w-4" />}>Create from search</Button>
@@ -61,16 +90,18 @@ export default function CampaignsPage() {
           }
         />
 
+        {error ? <Alert title="Action failed">{error}</Alert> : null}
+
         {loading ? (
           <div className="space-y-3">
             <SkeletonCard />
             <SkeletonCard />
           </div>
-        ) : campaigns.length === 0 ? (
+        ) : items.length === 0 ? (
           <EmptyState
             icon={Mail}
-            title="No campaigns yet"
-            description="Generate outreach from a company detail drawer, then create a campaign from your search results."
+            title="No campaigns or saved searches yet"
+            description="Complete a search and save the results, or create a campaign from your search results."
             action={
               <Link href="/search">
                 <Button>Start a search</Button>
@@ -78,26 +109,11 @@ export default function CampaignsPage() {
             }
           />
         ) : (
-          <div className="space-y-3">
-            {campaigns.map((campaign) => (
-              <Link key={campaign.id} href={`/campaigns/${campaign.id}`}>
-                <Card hover className="transition-colors hover:border-brand-200">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-slate-900">{campaign.name}</p>
-                        <Badge variant="default">{channelLabel(campaign.channel)}</Badge>
-                      </div>
-                      <p className="mt-1 truncate text-sm text-slate-600">
-                        {campaign.channel === "EMAIL" ? campaign.subject : channelLabel(campaign.channel)}
-                      </p>
-                    </div>
-                    <Badge variant={statusVariant(campaign.status)}>{campaign.status}</Badge>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
+          <CampaignsPageList
+            items={items}
+            deletingId={deletingId}
+            onDeleteSavedSearch={(savedSearchId) => void handleDeleteSavedSearch(savedSearchId)}
+          />
         )}
       </div>
     </main>

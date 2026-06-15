@@ -17,12 +17,14 @@ import type {
   SearchStageFailureResponse,
   SearchSummaryResponse,
 } from "@/types/api/search.api.types.js";
+import type { SavedSearchItemResponse } from "@/types/api/saved-search.api.types.js";
 import type { RankedLeadRecord } from "@/types/repositories/lead.repository.types.js";
 import type { SearchJobRecord } from "@/types/repositories/search.repository.types.js";
 import type {
   CompanyDetailRecord,
   CompanyListItemRecord,
 } from "@/types/repositories/company.repository.types.js";
+import type { SavedSearchDetailRecord } from "@/types/repositories/saved-search.repository.types.js";
 import { toIsoString } from "@/lib/api/request-utils.js";
 import { sanitizeProfileForResponse } from "@/lib/api/sanitize-profile.js";
 
@@ -147,6 +149,17 @@ function mapSearchResultItem(result: RankedLeadRecord): SearchResultItemResponse
     company: mapCompanySummary(result.company),
     profile: sanitizeProfileForResponse(result.profile?.structuredData ?? null),
     profileCompleteness: result.profile?.completeness ?? null,
+  };
+}
+
+export function mapSavedSearchItem(record: SavedSearchDetailRecord): SavedSearchItemResponse {
+  return {
+    id: record.id,
+    searchJobId: record.searchJobId,
+    query: record.query,
+    savedAt: record.savedAt.toISOString(),
+    leadCount: record.leadCount,
+    outreachStatus: record.outreachStatus,
   };
 }
 

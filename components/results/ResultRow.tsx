@@ -3,7 +3,6 @@
 import { memo } from "react";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types.js";
-import { Button } from "@/components/ui/Button";
 import {
   displayValue,
   formatLocation,
@@ -17,23 +16,18 @@ import { cn } from "@/lib/utils/cn";
 interface ResultRowProps {
   result: SearchResultItemResponse;
   searchCriteria: ParsedQuery | null;
-  isSaved: boolean;
   selected: boolean;
   onSelectChange: (searchResultId: string, selected: boolean) => void;
   onOpenDetail: (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => void;
-  onToggleSave: (companyId: string) => void;
   className?: string;
 }
 
-// Memoized so polling refreshes only re-render rows whose props changed.
 export const ResultRow = memo(function ResultRow({
   result,
   searchCriteria,
-  isSaved,
   selected,
   onSelectChange,
   onOpenDetail,
-  onToggleSave,
   className,
 }: ResultRowProps) {
   const profile = result.profile;
@@ -101,17 +95,6 @@ export const ResultRow = memo(function ResultRow({
         ) : (
           <span className="text-slate-400">{decisionMakerLabel}</span>
         )}
-      </td>
-      <td className="px-4 py-4 align-top">
-        <Button
-          type="button"
-          variant={isSaved ? "primary" : "secondary"}
-          size="sm"
-          onClick={() => onToggleSave(result.company.id)}
-          aria-pressed={isSaved}
-        >
-          {isSaved ? "Saved" : "Save"}
-        </Button>
       </td>
     </tr>
   );

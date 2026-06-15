@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError } from "@/lib/api/api-client-error";
-import { fetchSearchJob } from "@/lib/api/browser-client";
+import { fetchSearchJob, stopSearchJob } from "@/lib/api/browser-client";
 import { isSearchJobActive } from "@/lib/results/search-job-status";
 import type { GetSearchResponse } from "@/types/api/search.api.types";
 
@@ -15,8 +15,10 @@ export interface SearchJobApiFilters {
 export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilters) {
   const [data, setData] = useState<GetSearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [controlError, setControlError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isControlPending, setIsControlPending] = useState(false);
   const requestIdRef = useRef(0);
   const hasLoadedOnceRef = useRef(false);
 
@@ -67,8 +69,6 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
   );
 
   useEffect(() => {
-    // Only the very first fetch shows the full-page skeleton; filter changes
-    // refresh in the background instead of flashing the loading state.
     void load({ initial: !hasLoadedOnceRef.current });
   }, [load]);
 
@@ -79,8 +79,6 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
       return;
     }
 
-    // Depend on the active flag (not the data object) so the interval is not
-    // torn down and recreated after every poll response.
     const intervalId = window.setInterval(() => {
       void load();
     }, POLL_INTERVAL_MS);
@@ -88,11 +86,33 @@ export function useSearchJob(searchJobId: string, apiFilters: SearchJobApiFilter
     return () => window.clearInterval(intervalId);
   }, [isJobActive, load]);
 
+  const stopJob = useCallback(async () => {
+    setIsControlPending(true);
+    setControlError(null);
+
+    try {
+      await stopSearchJob(searchJobId);
+      await load();
+    } catch (stopError) {
+      setControlError(
+        stopError instanceof ApiClientError
+          ? stopError.message
+          : "Failed to stop search",
+      );
+    } finally {
+      setIsControlPending(false);
+    }
+  }, [load, searchJobId]);
+
   return {
     data,
     error,
+    controlError,
     isLoading,
     isRefreshing,
+    isJobActive,
+    isControlPending,
     reload: () => load(),
+    stopJob,
   };
 }

@@ -12,6 +12,8 @@ export const PERMISSIONS = {
   "user:manage": ["ADMIN"],
   "org:services:edit": ["ADMIN"],
   "refresh:manage": ["ADMIN", "MANAGER", "SALES_REP"],
+  "saved-search:read": ["ADMIN", "MANAGER", "SALES_REP"],
+  "saved-search:write": ["ADMIN", "MANAGER", "SALES_REP"],
 } as const satisfies Record<string, readonly UserRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

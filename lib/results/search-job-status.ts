@@ -14,6 +14,10 @@ export function isSearchJobActive(status: SearchJobStatus): boolean {
   return ACTIVE_SEARCH_JOB_STATUSES.includes(status);
 }
 
+export function isSearchJobCancelled(status: SearchJobStatus): boolean {
+  return status === "CANCELLED";
+}
+
 export function formatSearchJobStatus(status: SearchJobStatus): string {
   return status
     .toLowerCase()

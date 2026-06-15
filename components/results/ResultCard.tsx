@@ -3,7 +3,6 @@
 import { memo } from "react";
 import type { ParsedQuery } from "@/types/agents/query-parser.types.js";
 import type { SearchResultItemResponse } from "@/types/api/search.api.types.js";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
   displayValue,
@@ -18,22 +17,18 @@ import { cn } from "@/lib/utils/cn";
 interface ResultCardProps {
   result: SearchResultItemResponse;
   searchCriteria: ParsedQuery | null;
-  isSaved: boolean;
   selected: boolean;
   onSelectChange: (searchResultId: string, selected: boolean) => void;
   onOpenDetail: (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => void;
-  onToggleSave: (companyId: string) => void;
   className?: string;
 }
 
 export const ResultCard = memo(function ResultCard({
   result,
   searchCriteria,
-  isSaved,
   selected,
   onSelectChange,
   onOpenDetail,
-  onToggleSave,
   className,
 }: ResultCardProps) {
   const profile = result.profile;
@@ -57,25 +52,13 @@ export const ResultCard = memo(function ResultCard({
         />
 
         <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => onOpenDetail(result)}
-              className="text-left text-base font-semibold text-slate-900 hover:text-brand-600"
-            >
-              {companyLabel}
-            </button>
-            <Button
-              type="button"
-              variant={isSaved ? "primary" : "secondary"}
-              size="sm"
-              className="shrink-0"
-              onClick={() => onToggleSave(result.company.id)}
-              aria-pressed={isSaved}
-            >
-              {isSaved ? "Saved" : "Save"}
-            </Button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onOpenDetail(result)}
+            className="text-left text-base font-semibold text-slate-900 hover:text-brand-600"
+          >
+            {companyLabel}
+          </button>
 
           <dl className="grid gap-2 text-sm">
             <CardField label="Website">

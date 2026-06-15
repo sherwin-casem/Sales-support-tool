@@ -68,3 +68,8 @@ export interface GetSearchResponse {
   results: SearchResultItemResponse[];
   failures: SearchStageFailureResponse[];
 }
+
+export interface SearchJobControlResponse {
+  id: string;
+  status: SearchJobStatus;
+}

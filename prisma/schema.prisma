@@ -21,6 +21,7 @@ enum SearchJobStatus {
   CRAWLING
   EXTRACTING
   ENRICHING
+  PAUSED
   COMPLETED
   FAILED
   CANCELLED
@@ -114,6 +115,7 @@ model User {
   outreachMessages     OutreachMessage[]
   campaigns            Campaign[]
   leadRefreshSchedules LeadRefreshSchedule[]
+  savedSearches        SavedSearch[]
 
   @@index([organizationId])
   @@map("users")
@@ -191,8 +193,9 @@ model SearchJob {
   createdAt    DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
 
-  user    User           @relation(fields: [userId], references: [id])
-  results SearchResult[]
+  user         User           @relation(fields: [userId], references: [id])
+  results      SearchResult[]
+  savedSearches SavedSearch[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt])
@@ -226,6 +229,24 @@ model SearchResult {
   @@index([searchJobId, rank])
   @@index([companyId])
   @@map("search_results")
+}
+
+// ---------------------------------------------------------------------------
+// SavedSearch — user-saved completed search job for later outreach
+// ---------------------------------------------------------------------------
+
+model SavedSearch {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  searchJobId String   @db.Uuid
+  savedAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  searchJob SearchJob @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, searchJobId])
+  @@index([userId, savedAt(sort: Desc)])
+  @@map("saved_searches")
 }
 
 // ---------------------------------------------------------------------------

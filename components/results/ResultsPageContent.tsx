@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { CampaignCreateModal } from "@/components/outreach/CampaignCreateModal";
 import { ResultsList } from "@/components/results/ResultsList";
 import { ResultsToolbar } from "@/components/results/ResultsToolbar";
 import { SearchJobHeader } from "@/components/results/SearchJobHeader";
-import { useSavedCompanies } from "@/components/results/use-saved-companies";
+import { useSavedSearch } from "@/components/results/use-saved-search";
 import { useSearchJob } from "@/components/results/use-search-job";
 import { processSearchResults } from "@/lib/results/process-search-results";
+import { isSearchJobCancelled } from "@/lib/results/search-job-status";
 import {
   DEFAULT_RESULTS_VIEW,
   ResultsViewSchema,
@@ -23,8 +25,6 @@ import type {
   ResultDetailFocus,
 } from "@/types/results/result-detail.types";
 
-// Lazy-loaded: the drawer (and its large contact-validation dependency) is only
-// fetched when a result is opened, keeping it out of the initial bundle.
 const CompanyDetailDrawer = dynamic(
   () =>
     import("@/components/results/CompanyDetailDrawer.js").then(
@@ -47,6 +47,8 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   );
   const [campaignModalOpen, setCampaignModalOpen] = useState(false);
 
+  const { isSaved, saveSearch, savePending, error: saveError } = useSavedSearch(searchJobId);
+
   const handleOpenDetail = useCallback(
     (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => {
       setSelectedResult(result);
@@ -60,8 +62,6 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     setDetailFocus("overview");
   }, []);
 
-  const { isSaved, toggleSave } = useSavedCompanies();
-
   const apiFilters = useMemo(
     () => ({
       stage: view.stage,
@@ -69,13 +69,13 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     [view.stage],
   );
 
-  const { data, error, isLoading, isRefreshing, reload } = useSearchJob(
+  const { data, error, isLoading, isRefreshing, isJobActive, reload } = useSearchJob(
     searchJobId,
     apiFilters,
   );
 
   const processed = useMemo(() => {
-    if (!data) {
+    if (!data || isSearchJobCancelled(data.status)) {
       return null;
     }
 
@@ -138,12 +138,8 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     router.push("/search");
   }
 
-  if (isLoading) {
-    return (
-      <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
-        <ResultsSkeleton />
-      </main>
-    );
+  if (isLoading || isJobActive) {
+    return <SearchJobLoadingView />;
   }
 
   if (error || !data) {
@@ -162,6 +158,26 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     );
   }
 
+  if (isSearchJobCancelled(data.status)) {
+    return (
+      <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mb-4 sm:mb-6">
+          <Button type="button" variant="ghost" className="px-0" onClick={handleBack}>
+            ← Back
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          <SearchJobHeader job={data} isRefreshing={false} />
+          <Alert title="Search stopped">{data.errorMessage ?? "This search was stopped."}</Alert>
+          <Button type="button" variant="secondary" onClick={() => router.push("/search")}>
+            Start a new search
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
       <div className="mb-4 sm:mb-6">
@@ -173,7 +189,16 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
       <div className="space-y-4 sm:space-y-6">
         <SearchJobHeader job={data} isRefreshing={isRefreshing} />
 
-        <ResultsToolbar view={view} onChange={updateView} />
+        <ResultsToolbar
+          view={view}
+          onChange={updateView}
+          showSaveResults={data.status === "COMPLETED" && data.results.length > 0}
+          isSaved={isSaved}
+          onSaveResults={() => void saveSearch()}
+          savePending={savePending}
+        />
+
+        {saveError ? <Alert title="Save failed">{saveError}</Alert> : null}
 
         {selectedSearchResultIds.size > 0 ? (
           <section className="flex flex-col gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -200,12 +225,10 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
             items={processed.items}
             pagination={processed.pagination}
             searchCriteria={data.criteria}
-            isSaved={isSaved}
             selectedIds={selectedSearchResultIds}
             onSelectChange={handleSelectChange}
             onSelectAllOnPage={handleSelectAllOnPage}
             onOpenDetail={handleOpenDetail}
-            onToggleSave={toggleSave}
             onPageChange={handlePageChange}
           />
         ) : null}
@@ -231,16 +254,15 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
   );
 }
 
-function ResultsSkeleton() {
+function SearchJobLoadingView() {
   return (
-    <div className="animate-pulse space-y-4 sm:space-y-6">
-      <div className="h-8 w-2/3 rounded-lg bg-slate-200" />
-      <div className="h-20 rounded-2xl bg-slate-200 sm:h-24" />
-      <div className="space-y-3 lg:hidden">
-        <div className="h-44 rounded-2xl bg-slate-200" />
-        <div className="h-44 rounded-2xl bg-slate-200" />
-      </div>
-      <div className="hidden h-72 rounded-2xl bg-slate-200 lg:block" />
-    </div>
+    <main
+      className="flex min-h-screen w-full items-center justify-center bg-white"
+      role="status"
+      aria-live="polite"
+      aria-label="Search in progress"
+    >
+      <Spinner className="h-10 w-10 text-brand-600" />
+    </main>
   );
 }

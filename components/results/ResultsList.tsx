@@ -12,12 +12,10 @@ interface ResultsListProps {
   items: SearchResultItemResponse[];
   pagination: PaginationMeta;
   searchCriteria: ParsedQuery | null;
-  isSaved: (companyId: string) => boolean;
   selectedIds: Set<string>;
   onSelectChange: (searchResultId: string, selected: boolean) => void;
   onSelectAllOnPage: (selected: boolean) => void;
   onOpenDetail: (result: SearchResultItemResponse, options?: OpenResultDetailOptions) => void;
-  onToggleSave: (companyId: string) => void;
   onPageChange: (page: number) => void;
 }
 
@@ -25,12 +23,10 @@ export function ResultsList({
   items,
   pagination,
   searchCriteria,
-  isSaved,
   selectedIds,
   onSelectChange,
   onSelectAllOnPage,
   onOpenDetail,
-  onToggleSave,
   onPageChange,
 }: ResultsListProps) {
   const allSelectedOnPage =
@@ -77,20 +73,16 @@ export function ResultsList({
             key={result.searchResultId}
             result={result}
             searchCriteria={searchCriteria}
-            isSaved={isSaved(result.company.id)}
             selected={selectedIds.has(result.searchResultId)}
             onSelectChange={onSelectChange}
             onOpenDetail={onOpenDetail}
-            onToggleSave={onToggleSave}
           />
         ))}
       </div>
 
       <div className="hidden overflow-x-auto surface-card lg:block">
-        <table className="w-full min-w-[960px] divide-y divide-slate-200">
-          <caption className="sr-only">
-            Search results with company details and save actions
-          </caption>
+        <table className="w-full min-w-[880px] divide-y divide-slate-200">
+          <caption className="sr-only">Search results with company details</caption>
           <thead className="bg-slate-50">
             <tr>
               <th scope="col" className="px-4 py-3 text-left">
@@ -113,7 +105,6 @@ export function ResultsList({
               <TableHeader>Location</TableHeader>
               <TableHeader>Company size</TableHeader>
               <TableHeader>Decision maker</TableHeader>
-              <TableHeader>Save</TableHeader>
             </tr>
           </thead>
           <tbody>
@@ -122,11 +113,9 @@ export function ResultsList({
                 key={result.searchResultId}
                 result={result}
                 searchCriteria={searchCriteria}
-                isSaved={isSaved(result.company.id)}
                 selected={selectedIds.has(result.searchResultId)}
                 onSelectChange={onSelectChange}
                 onOpenDetail={onOpenDetail}
-                onToggleSave={onToggleSave}
               />
             ))}
           </tbody>
