@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { CampaignCreateModal } from "@/components/outreach/CampaignCreateModal";
 import { ResultsList } from "@/components/results/ResultsList";
 import { ResultsToolbar } from "@/components/results/ResultsToolbar";
+import { SearchJobControls } from "@/components/results/SearchJobControls";
 import { SearchJobHeader } from "@/components/results/SearchJobHeader";
 import { useSavedSearch } from "@/components/results/use-saved-search";
 import { useSearchJob } from "@/components/results/use-search-job";
@@ -19,7 +20,10 @@ import {
   ResultsViewSchema,
   type ResultsViewState,
 } from "@/lib/validations/results-view.schema";
-import type { SearchResultItemResponse } from "@/types/api/search.api.types";
+import type {
+  GetSearchResponse,
+  SearchResultItemResponse,
+} from "@/types/api/search.api.types";
 import type {
   OpenResultDetailOptions,
   ResultDetailFocus,
@@ -69,10 +73,17 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     [view.stage],
   );
 
-  const { data, error, isLoading, isRefreshing, isJobActive, reload } = useSearchJob(
-    searchJobId,
-    apiFilters,
-  );
+  const {
+    data,
+    error,
+    isLoading,
+    isRefreshing,
+    isJobActive,
+    stopJob,
+    isControlPending,
+    controlError,
+    reload,
+  } = useSearchJob(searchJobId, apiFilters);
 
   const processed = useMemo(() => {
     if (!data || isSearchJobCancelled(data.status)) {
@@ -138,8 +149,20 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
     router.push("/search");
   }
 
-  if (isLoading || isJobActive) {
+  if (isLoading && !data) {
     return <SearchJobLoadingView />;
+  }
+
+  if (isJobActive && data) {
+    return (
+      <SearchJobActiveView
+        job={data}
+        isStopPending={isControlPending}
+        controlError={controlError}
+        onBack={handleBack}
+        onStop={() => void stopJob()}
+      />
+    );
   }
 
   if (error || !data) {
@@ -263,6 +286,46 @@ function SearchJobLoadingView() {
       aria-label="Search in progress"
     >
       <Spinner className="h-10 w-10 text-brand-600" />
+    </main>
+  );
+}
+
+interface SearchJobActiveViewProps {
+  job: GetSearchResponse;
+  isStopPending: boolean;
+  controlError: string | null;
+  onBack: () => void;
+  onStop: () => void;
+}
+
+function SearchJobActiveView({
+  job,
+  isStopPending,
+  controlError,
+  onBack,
+  onStop,
+}: SearchJobActiveViewProps) {
+  return (
+    <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+      <div className="mb-4 sm:mb-6">
+        <Button type="button" variant="ghost" className="px-0" onClick={onBack}>
+          ← Back
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        <SearchJobHeader job={job} isRefreshing={false} />
+        <SearchJobControls job={job} isPending={isStopPending} onStop={onStop} />
+        {controlError ? <Alert title="Unable to stop search">{controlError}</Alert> : null}
+        <div
+          className="flex justify-center py-8"
+          role="status"
+          aria-live="polite"
+          aria-label="Search in progress"
+        >
+          <Spinner className="h-10 w-10 text-brand-600" />
+        </div>
+      </div>
     </main>
   );
 }
