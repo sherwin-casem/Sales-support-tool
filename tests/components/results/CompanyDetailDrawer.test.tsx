@@ -94,11 +94,31 @@ describe("CompanyDetailDrawer", () => {
     expect(html).toContain("jane@acme.fi");
     expect(html).toContain("+358 9 111 2222");
     expect(html).toContain("https://linkedin.com/in/janedoe");
+    expect(html).toContain("Outreach message");
+    expect(html).toContain("Generate with AI");
+    expect(html).toContain("Send to:");
     expect(html).not.toContain("Acme Logistics Oy");
     expect(html).not.toContain("Overview");
     expect(html).not.toContain("Technology");
     expect(html).not.toContain("Company contact");
     expect(html).not.toContain("info@acme.fi");
+  });
+
+  it("renders outreach in decision maker mode when personal contact fields are missing", () => {
+    const html = renderDrawer(
+      createSearchResult({
+        decisionMakerEmail: null,
+        decisionMakerPhone: null,
+        decisionMakerLinkedInUrl: null,
+      }),
+      "decisionMaker",
+    );
+
+    expect(html).toContain("No personal email, phone, or LinkedIn was found for this decision maker.");
+    expect(html).toContain("Outreach message");
+    expect(html).toContain("Generate with AI");
+    expect(html).toContain("Send to:");
+    expect(html).toContain("info@acme.fi");
   });
 
   it("shows an empty personal contact message when personal fields are missing", () => {

@@ -65,7 +65,12 @@ export function CompanyDetailDrawer({
   return (
     <Drawer open={open} onClose={onClose} title={drawerTitle}>
       {focusSection === "decisionMaker" ? (
-        <DecisionMakerOnlyContent profile={profile} contact={decisionMakerContact} />
+        <DecisionMakerOnlyContent
+          result={result}
+          profile={profile}
+          contact={decisionMakerContact}
+          onCampaignCreated={(campaignId) => router.push(`/campaigns/${campaignId}`)}
+        />
       ) : (
         <CompanyOverviewContent
           result={result}
@@ -81,11 +86,15 @@ export function CompanyDetailDrawer({
 }
 
 function DecisionMakerOnlyContent({
+  result,
   profile,
   contact,
+  onCampaignCreated,
 }: {
+  result: SearchResultItemResponse;
   profile: SearchResultItemResponse["profile"];
   contact: ReturnType<typeof resolveDecisionMakerContact>;
+  onCampaignCreated?: (campaignId: string) => void;
 }) {
   if (!profile) {
     return (
@@ -110,13 +119,18 @@ function DecisionMakerOnlyContent({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-6">
       <DecisionMakerContactPanel contact={contact} highlighted />
       {!hasDecisionMakerContactDetails(contact) ? (
         <p className="text-sm text-slate-600">
           No personal email, phone, or LinkedIn was found for this decision maker.
         </p>
       ) : null}
+      <LeadOutreachSection
+        result={result}
+        profile={profile}
+        onCampaignCreated={onCampaignCreated}
+      />
     </div>
   );
 }
@@ -138,11 +152,6 @@ function CompanyOverviewContent({
 }) {
   const hasCompanyContact = profile ? hasCompanyContactDetails(profile) : false;
 
-  const companyLabel = getCompanyDisplayName(
-    profile,
-    result.company.name,
-    result.company.domain,
-  );
   const location = formatLocation(profile, searchCriteria);
   const overviewItems = profile
     ? [
@@ -230,15 +239,9 @@ function CompanyOverviewContent({
             </section>
           ) : null}
 
-          <OutreachComposer
-            companyId={result.company.id}
-            searchResultId={result.searchResultId}
-            companyLabel={companyLabel}
-            contactPreview={{
-              EMAIL: resolveRecipientForChannel(profile, "EMAIL")?.toAddress ?? null,
-              WHATSAPP: resolveRecipientForChannel(profile, "WHATSAPP")?.toAddress ?? null,
-              LINKEDIN: resolveRecipientForChannel(profile, "LINKEDIN")?.toAddress ?? null,
-            }}
+          <LeadOutreachSection
+            result={result}
+            profile={profile}
             onCampaignCreated={onCampaignCreated}
           />
         </>
@@ -251,6 +254,36 @@ function CompanyOverviewContent({
         </section>
       )}
     </div>
+  );
+}
+
+function LeadOutreachSection({
+  result,
+  profile,
+  onCampaignCreated,
+}: {
+  result: SearchResultItemResponse;
+  profile: NonNullable<SearchResultItemResponse["profile"]>;
+  onCampaignCreated?: (campaignId: string) => void;
+}) {
+  const companyLabel = getCompanyDisplayName(
+    profile,
+    result.company.name,
+    result.company.domain,
+  );
+
+  return (
+    <OutreachComposer
+      companyId={result.company.id}
+      searchResultId={result.searchResultId}
+      companyLabel={companyLabel}
+      contactPreview={{
+        EMAIL: resolveRecipientForChannel(profile, "EMAIL")?.toAddress ?? null,
+        WHATSAPP: resolveRecipientForChannel(profile, "WHATSAPP")?.toAddress ?? null,
+        LINKEDIN: resolveRecipientForChannel(profile, "LINKEDIN")?.toAddress ?? null,
+      }}
+      onCampaignCreated={onCampaignCreated}
+    />
   );
 }
 
