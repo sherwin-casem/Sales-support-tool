@@ -1,6 +1,7 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
 import {
   isGenericEmailLocalPart,
+  isPersonalLinkedInUrl,
   normalizePhoneDigits,
   validateEmail,
   validatePersonalEmail,
@@ -24,15 +25,6 @@ function isUnknown(value: string): boolean {
 
 function isGenericEmail(email: string): boolean {
   return isGenericEmailLocalPart(email);
-}
-
-export function isPersonalLinkedInUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.pathname.toLowerCase().startsWith("/in/");
-  } catch {
-    return false;
-  }
 }
 
 function isCompanyLinkedInUrl(url: string): boolean {
