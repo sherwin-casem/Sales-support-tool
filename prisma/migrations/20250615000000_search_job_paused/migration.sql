@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "SearchJobStatus" ADD VALUE 'PAUSED' BEFORE 'COMPLETED';

@@ -4,7 +4,11 @@ import type { RegisterRequestInput } from "@/lib/validations/api/auth.schema";
 import type { CreateSearchRequestInput } from "@/lib/validations/api/search.schema";
 import type { GetCompanyResponse } from "@/types/api/company.api.types";
 import type { RegisterResponse } from "@/types/api/auth.api.types";
-import type { CreateSearchResponse, GetSearchResponse } from "@/types/api/search.api.types";
+import type {
+  CreateSearchResponse,
+  GetSearchResponse,
+  SearchJobControlResponse,
+} from "@/types/api/search.api.types";
 import type { GetSearchQueryInput } from "@/lib/validations/api/search.schema";
 
 async function parseErrorResponse(response: Response): Promise<ApiClientError> {
@@ -95,6 +99,12 @@ export async function fetchSearchJob(
   }
 
   return response.json() as Promise<GetSearchResponse>;
+}
+
+export async function stopSearchJob(searchJobId: string): Promise<SearchJobControlResponse> {
+  return apiFetch<SearchJobControlResponse>(`/api/v1/search/${searchJobId}/stop`, {
+    method: "POST",
+  });
 }
 
 export async function fetchCompany(companyId: string): Promise<GetCompanyResponse> {
