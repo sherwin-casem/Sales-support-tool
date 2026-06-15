@@ -12,7 +12,6 @@ import { SearchJobHeader } from "@/components/results/SearchJobHeader";
 import { useSavedCompanies } from "@/components/results/use-saved-companies";
 import { useSearchJob } from "@/components/results/use-search-job";
 import { processSearchResults } from "@/lib/results/process-search-results";
-import { isSearchJobActive } from "@/lib/results/search-job-status";
 import {
   DEFAULT_RESULTS_VIEW,
   ResultsViewSchema,
@@ -175,12 +174,6 @@ export function ResultsPageContent({ searchJobId }: ResultsPageContentProps) {
         <SearchJobHeader job={data} isRefreshing={isRefreshing} />
 
         <ResultsToolbar view={view} onChange={updateView} />
-
-        {isSearchJobActive(data.status) ? (
-          <p className="text-sm text-slate-600" aria-live="polite">
-            Search is still running. Results will refresh automatically as companies are processed.
-          </p>
-        ) : null}
 
         {selectedSearchResultIds.size > 0 ? (
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
