@@ -73,8 +73,9 @@ describe("CompanyDetailDrawer", () => {
     expect(html).toContain("Target customers");
     expect(html).toContain("Outreach message");
     expect(html).toContain("Generate with AI");
+    expect(html).toContain("Send to:");
+    expect(html).toContain("jane@acme.fi");
     expect(html).not.toContain("Decision maker contact");
-    expect(html).not.toContain("jane@acme.fi");
   });
 
   it("places company contact after services and target customers", () => {

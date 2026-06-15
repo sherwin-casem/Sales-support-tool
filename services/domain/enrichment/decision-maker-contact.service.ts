@@ -26,7 +26,7 @@ function isGenericEmail(email: string): boolean {
   return isGenericEmailLocalPart(email);
 }
 
-function isPersonalLinkedInUrl(url: string): boolean {
+export function isPersonalLinkedInUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return parsed.pathname.toLowerCase().startsWith("/in/");

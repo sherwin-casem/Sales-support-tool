@@ -1,19 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
-  OUTREACH_MESSAGE_JSON_SCHEMA,
+  getOutreachMessageJsonSchema,
   OutreachMessageOutputSchema,
+  validateOutreachMessageOutput,
   bodyTextToHtml,
   resolveOutreachBodyHtml,
 } from "@/lib/validations/outreach-message.schema.js";
 
-describe("OUTREACH_MESSAGE_JSON_SCHEMA", () => {
-  it("requires every property key for OpenAI strict mode", () => {
-    const propertyKeys = Object.keys(OUTREACH_MESSAGE_JSON_SCHEMA.properties);
-    const requiredKeys = OUTREACH_MESSAGE_JSON_SCHEMA.required;
+describe("getOutreachMessageJsonSchema", () => {
+  it("requires subject for email channel", () => {
+    const schema = getOutreachMessageJsonSchema("EMAIL");
+    expect(schema.required).toContain("subject");
+  });
 
-    for (const key of propertyKeys) {
-      expect(requiredKeys).toContain(key);
-    }
+  it("does not require subject for WhatsApp channel", () => {
+    const schema = getOutreachMessageJsonSchema("WHATSAPP");
+    expect(schema.required).not.toContain("subject");
   });
 });
 
@@ -38,14 +40,28 @@ describe("OutreachMessageOutputSchema", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("rejects empty subject", () => {
+  it("allows empty subject at schema level", () => {
     const parsed = OutreachMessageOutputSchema.safeParse({
       subject: "",
       bodyText: "Hello",
       bodyHtml: null,
     });
 
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects empty email subject via channel validation", () => {
+    const parsed = OutreachMessageOutputSchema.safeParse({
+      subject: "",
+      bodyText: "Hello",
+      bodyHtml: null,
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      const channelValidated = validateOutreachMessageOutput("EMAIL", parsed.data);
+      expect(channelValidated.success).toBe(false);
+    }
   });
 });
 

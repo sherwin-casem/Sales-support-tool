@@ -24,6 +24,7 @@ import {
   resolveDisplayEmail,
   resolveDisplayPhone,
 } from "@/lib/results/profile-contacts";
+import { resolveRecipientForChannel } from "@/services/domain/outreach/recipient-resolver.service";
 
 interface CompanyDetailDrawerProps {
   result: SearchResultItemResponse | null;
@@ -236,6 +237,11 @@ function CompanyOverviewContent({
             companyId={result.company.id}
             searchResultId={result.searchResultId}
             companyLabel={companyLabel}
+            contactPreview={{
+              EMAIL: resolveRecipientForChannel(profile, "EMAIL")?.toAddress ?? null,
+              WHATSAPP: resolveRecipientForChannel(profile, "WHATSAPP")?.toAddress ?? null,
+              LINKEDIN: resolveRecipientForChannel(profile, "LINKEDIN")?.toAddress ?? null,
+            }}
             onCampaignCreated={onCampaignCreated}
           />
         </>

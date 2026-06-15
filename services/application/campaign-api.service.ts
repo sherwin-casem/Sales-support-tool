@@ -1,20 +1,19 @@
 import { ApiError } from "@/lib/api/api-error.js";
-import { getOutreachConfig } from "@/lib/config/outreach.config.js";
-import { validatePersonalEmail } from "@/lib/validations/lead-contact.validation.js";
+import {
+  getChannelConfigError,
+  getOutreachConfig,
+  isChannelConfigured,
+} from "@/lib/config/outreach.config.js";
+import { resolveOutreachBodyHtml } from "@/lib/validations/outreach-message.schema.js";
+import type { CreateCampaignInput } from "@/lib/validations/campaign.schema.js";
 import type { CampaignRepository } from "@/repositories/prisma/campaign.repository.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
 import type { CampaignOrchestratorService } from "@/services/application/campaign-orchestrator.service.js";
+import {
+  getRecipientMissingContactMessage,
+  resolveRecipientForChannel,
+} from "@/services/domain/outreach/recipient-resolver.service.js";
 import type { AuthenticatedUser } from "@/types/auth/session.types.js";
-import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
-
-export interface CreateCampaignInput {
-  name: string;
-  subject: string;
-  bodyHtml: string;
-  bodyText: string;
-  companyIds?: string[];
-  searchResultIds?: string[];
-}
 
 export interface CampaignApiServiceDependencies {
   campaignRepository: CampaignRepository;
@@ -24,21 +23,23 @@ export interface CampaignApiServiceDependencies {
   getOutreachConfig?: typeof getOutreachConfig;
 }
 
-function resolveRecipientEmail(profile: ExtractedCompany): string | null {
-  return (
-    validatePersonalEmail(profile.decisionMakerEmail, profile.email) ??
-    validatePersonalEmail(profile.email)
-  );
-}
-
 export class CampaignApiService {
   constructor(private readonly deps: CampaignApiServiceDependencies) {}
 
   async createCampaign(user: AuthenticatedUser, input: CreateCampaignInput) {
+    const channel = input.channel;
+    const outreachConfig = (this.deps.getOutreachConfig ?? getOutreachConfig)();
+
+    if (!isChannelConfigured(channel, outreachConfig)) {
+      throw ApiError.serviceUnavailable(getChannelConfigError(channel));
+    }
+
     const recipients: Array<{
       companyId: string;
       searchResultId?: string | null;
-      toEmail: string;
+      channel: typeof channel;
+      toAddress: string;
+      toEmail?: string | null;
       toName?: string | null;
     }> = [];
 
@@ -53,19 +54,21 @@ export class CampaignApiService {
           continue;
         }
 
-        const email = resolveRecipientEmail(match.profile.structuredData);
+        const resolved = resolveRecipientForChannel(match.profile.structuredData, channel);
 
-        if (!email) {
+        if (!resolved) {
           throw ApiError.validationError(
-            `No valid personal email for company ${match.company.domain}`,
+            getRecipientMissingContactMessage(channel, match.company.domain),
           );
         }
 
         recipients.push({
           companyId: match.company.id,
           searchResultId,
-          toEmail: email,
-          toName: match.profile.structuredData.decisionMaker || null,
+          channel,
+          toAddress: resolved.toAddress,
+          toEmail: resolved.toEmail,
+          toName: resolved.toName,
         });
       }
     }
@@ -78,18 +81,20 @@ export class CampaignApiService {
           throw ApiError.notFound(`Company not found: ${companyId}`);
         }
 
-        const email = resolveRecipientEmail(detail.profile.structuredData);
+        const resolved = resolveRecipientForChannel(detail.profile.structuredData, channel);
 
-        if (!email) {
+        if (!resolved) {
           throw ApiError.validationError(
-            `No valid personal email for company ${detail.domain}`,
+            getRecipientMissingContactMessage(channel, detail.domain),
           );
         }
 
         recipients.push({
           companyId,
-          toEmail: email,
-          toName: detail.profile.structuredData.decisionMaker || null,
+          channel,
+          toAddress: resolved.toAddress,
+          toEmail: resolved.toEmail,
+          toName: resolved.toName,
         });
       }
     }
@@ -98,13 +103,21 @@ export class CampaignApiService {
       throw ApiError.invalidInput("At least one recipient is required");
     }
 
+    const bodyHtml =
+      channel === "EMAIL"
+        ? resolveOutreachBodyHtml(input.bodyText, input.bodyHtml || null)
+        : "";
+    const subject = channel === "EMAIL" ? input.subject : input.subject || "Outreach";
+
     const { campaign } = await this.deps.campaignRepository.createCampaign({
       userId: user.id,
       organizationId: user.organizationId,
       name: input.name,
-      subject: input.subject,
-      bodyHtml: input.bodyHtml,
+      channel,
+      subject,
+      bodyHtml,
       bodyText: input.bodyText,
+      outreachMessageId: input.outreachMessageId,
       recipients,
     });
 
@@ -143,13 +156,17 @@ export class CampaignApiService {
       recipients: campaign.recipients.map((recipient) => ({
         id: recipient.id,
         companyId: recipient.companyId,
+        channel: recipient.channel,
+        toAddress: recipient.toAddress,
         toEmail: recipient.toEmail,
         toName: recipient.toName,
         status: recipient.status,
         sentAt: recipient.sentAt?.toISOString() ?? null,
         deliveredAt: recipient.deliveredAt?.toISOString() ?? null,
         openedAt: recipient.openedAt?.toISOString() ?? null,
+        readAt: recipient.readAt?.toISOString() ?? null,
         clickedAt: recipient.clickedAt?.toISOString() ?? null,
+        repliedAt: recipient.repliedAt?.toISOString() ?? null,
         errorMessage: recipient.errorMessage,
       })),
       statusCounts,
@@ -166,10 +183,8 @@ export class CampaignApiService {
     const campaign = await this.getCampaign(user, campaignId);
     const outreachConfig = (this.deps.getOutreachConfig ?? getOutreachConfig)();
 
-    if (!outreachConfig.resendApiKey.trim()) {
-      throw ApiError.serviceUnavailable(
-        "Email delivery is not configured. Set RESEND_API_KEY to send campaigns.",
-      );
+    if (!isChannelConfigured(campaign.channel, outreachConfig)) {
+      throw ApiError.serviceUnavailable(getChannelConfigError(campaign.channel));
     }
 
     if (campaign.status === "RUNNING") {
@@ -201,14 +216,13 @@ export class CampaignApiService {
   async processDueScheduledCampaigns(): Promise<{ processedCampaignIds: string[] }> {
     const dueCampaigns = await this.deps.campaignRepository.listDueScheduledCampaigns();
     const outreachConfig = (this.deps.getOutreachConfig ?? getOutreachConfig)();
-
-    if (!outreachConfig.resendApiKey.trim()) {
-      return { processedCampaignIds: [] };
-    }
-
     const processedCampaignIds: string[] = [];
 
     for (const campaign of dueCampaigns) {
+      if (!isChannelConfigured(campaign.channel, outreachConfig)) {
+        continue;
+      }
+
       await this.deps.campaignRepository.updateStatus(campaign.id, "RUNNING", {
         startedAt: new Date(),
       });
@@ -226,6 +240,7 @@ export class CampaignApiService {
   private mapCampaignSummary(campaign: {
     id: string;
     name: string;
+    channel: string;
     status: string;
     subject: string;
     scheduledAt: Date | null;
@@ -236,6 +251,7 @@ export class CampaignApiService {
     return {
       id: campaign.id,
       name: campaign.name,
+      channel: campaign.channel,
       status: campaign.status,
       subject: campaign.subject,
       scheduledAt: campaign.scheduledAt?.toISOString() ?? null,
@@ -251,3 +267,5 @@ export function createCampaignApiService(
 ): CampaignApiService {
   return new CampaignApiService(deps);
 }
+
+export type { CreateCampaignInput };

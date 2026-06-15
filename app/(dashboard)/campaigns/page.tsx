@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Mail, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api/browser-client";
+import { channelLabel } from "@/lib/outreach/channel-labels";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,6 +15,7 @@ import { SkeletonCard } from "@/components/ui/Skeleton";
 interface CampaignSummary {
   id: string;
   name: string;
+  channel: string;
   status: string;
   subject: string;
   createdAt: string;
@@ -51,7 +53,7 @@ export default function CampaignsPage() {
         <PageHeader
           eyebrow="Outreach"
           title="Campaigns"
-          description="Email outreach and delivery tracking for your organization."
+          description="Multi-channel outreach and delivery tracking for your organization."
           actions={
             <Link href="/search">
               <Button leftIcon={<Plus className="h-4 w-4" />}>Create from search</Button>
@@ -82,8 +84,13 @@ export default function CampaignsPage() {
                 <Card hover className="transition-colors hover:border-brand-200">
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="font-medium text-slate-900">{campaign.name}</p>
-                      <p className="mt-1 truncate text-sm text-slate-600">{campaign.subject}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-slate-900">{campaign.name}</p>
+                        <Badge variant="default">{channelLabel(campaign.channel)}</Badge>
+                      </div>
+                      <p className="mt-1 truncate text-sm text-slate-600">
+                        {campaign.channel === "EMAIL" ? campaign.subject : channelLabel(campaign.channel)}
+                      </p>
                     </div>
                     <Badge variant={statusVariant(campaign.status)}>{campaign.status}</Badge>
                   </div>

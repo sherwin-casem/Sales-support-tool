@@ -259,6 +259,7 @@ model OutreachMessage {
   companyId       String          @db.Uuid
   searchResultId  String?         @db.Uuid
   channel         OutreachChannel @default(EMAIL)
+  toAddress       String?         @db.VarChar(500)
   subject         String          @db.VarChar(500)
   bodyText        String          @db.Text
   bodyHtml        String?         @db.Text
@@ -268,8 +269,9 @@ model OutreachMessage {
   parijatServices Json
   createdAt       DateTime        @default(now()) @db.Timestamptz(3)
 
-  user    User    @relation(fields: [userId], references: [id])
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id])
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([companyId, createdAt(sort: Desc)])
@@ -281,54 +283,81 @@ model OutreachMessage {
 // ---------------------------------------------------------------------------
 
 model Campaign {
-  id             String         @id @default(uuid()) @db.Uuid
-  userId         String         @db.Uuid
-  organizationId String         @db.Uuid
-  name           String         @db.VarChar(200)
-  status         CampaignStatus @default(DRAFT)
-  subject        String         @db.VarChar(500)
-  bodyHtml       String         @db.Text
-  bodyText       String         @db.Text
-  scheduledAt    DateTime?      @db.Timestamptz(3)
-  startedAt      DateTime?      @db.Timestamptz(3)
-  completedAt    DateTime?      @db.Timestamptz(3)
-  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+  id                String          @id @default(uuid()) @db.Uuid
+  userId            String          @db.Uuid
+  organizationId    String          @db.Uuid
+  name              String          @db.VarChar(200)
+  channel           OutreachChannel @default(EMAIL)
+  status            CampaignStatus  @default(DRAFT)
+  subject           String          @db.VarChar(500)
+  bodyHtml          String          @db.Text
+  bodyText          String          @db.Text
+  outreachMessageId String?         @db.Uuid
+  scheduledAt       DateTime?       @db.Timestamptz(3)
+  startedAt         DateTime?       @db.Timestamptz(3)
+  completedAt       DateTime?       @db.Timestamptz(3)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(3)
 
-  user         User                @relation(fields: [userId], references: [id])
-  organization Organization        @relation(fields: [organizationId], references: [id])
-  recipients   CampaignRecipient[]
+  user            User                @relation(fields: [userId], references: [id])
+  organization    Organization        @relation(fields: [organizationId], references: [id])
+  outreachMessage OutreachMessage?    @relation(fields: [outreachMessageId], references: [id], onDelete: SetNull)
+  recipients      CampaignRecipient[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([organizationId, status])
+  @@index([organizationId, channel])
   @@map("campaigns")
 }
 
 model CampaignRecipient {
-  id             String          @id @default(uuid()) @db.Uuid
-  campaignId     String          @db.Uuid
-  companyId      String          @db.Uuid
-  searchResultId String?         @db.Uuid
-  toEmail        String          @db.VarChar(320)
-  toName         String?         @db.VarChar(200)
-  status         RecipientStatus @default(PENDING)
-  providerId     String?         @db.VarChar(200)
-  sentAt         DateTime?       @db.Timestamptz(3)
-  deliveredAt    DateTime?       @db.Timestamptz(3)
-  openedAt       DateTime?       @db.Timestamptz(3)
-  clickedAt      DateTime?       @db.Timestamptz(3)
-  repliedAt      DateTime?       @db.Timestamptz(3)
-  bouncedAt      DateTime?       @db.Timestamptz(3)
-  errorMessage   String?         @db.Text
-  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime        @updatedAt @db.Timestamptz(3)
+  id               String          @id @default(uuid()) @db.Uuid
+  campaignId       String          @db.Uuid
+  companyId        String          @db.Uuid
+  searchResultId   String?         @db.Uuid
+  channel          OutreachChannel @default(EMAIL)
+  toAddress        String          @db.VarChar(500)
+  toEmail          String          @db.VarChar(320)
+  toName           String?         @db.VarChar(200)
+  status           RecipientStatus @default(PENDING)
+  providerId       String?         @db.VarChar(200)
+  providerMetadata Json?
+  sentAt           DateTime?       @db.Timestamptz(3)
+  deliveredAt      DateTime?       @db.Timestamptz(3)
+  openedAt         DateTime?       @db.Timestamptz(3)
+  readAt           DateTime?       @db.Timestamptz(3)
+  clickedAt        DateTime?       @db.Timestamptz(3)
+  repliedAt        DateTime?       @db.Timestamptz(3)
+  bouncedAt        DateTime?       @db.Timestamptz(3)
+  errorMessage     String?         @db.Text
+  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  company  Company  @relation(fields: [companyId], references: [id])
+  campaign       Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  company        Company         @relation(fields: [companyId], references: [id])
+  deliveryEvents DeliveryEvent[]
 
-  @@unique([campaignId, toEmail])
+  @@unique([campaignId, toAddress])
   @@index([campaignId, status])
+  @@index([campaignId, channel])
+  @@index([providerId])
   @@map("campaign_recipients")
+}
+
+model DeliveryEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  recipientId String   @db.Uuid
+  provider    String   @db.VarChar(50)
+  eventType   String   @db.VarChar(100)
+  payload     Json     @default("{}")
+  occurredAt  DateTime @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  recipient CampaignRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, occurredAt(sort: Desc)])
+  @@index([provider, eventType])
+  @@map("delivery_events")
 }
 
 // ---------------------------------------------------------------------------

@@ -1,28 +1,36 @@
 import { describe, expect, it, vi } from "vitest";
-import { ResendEmailAdapter } from "@/services/infrastructure/email/resend-email.adapter.js";
+import { ResendOutreachAdapter } from "@/services/infrastructure/outreach/adapters/resend.adapter.js";
 
-describe("ResendEmailAdapter", () => {
+const baseConfig = {
+  fromEmail: "sales@parijat.com",
+  fromName: "Parijat Sales",
+  sendRatePerMinute: 50,
+  emailRatePerMinute: 50,
+  whatsappRatePerMinute: 20,
+  linkedInRatePerMinute: 10,
+  resendApiKey: "re_test",
+  resendWebhookSecret: "",
+  whatsappAccessToken: "",
+  whatsappPhoneNumberId: "",
+  unipileApiKey: "",
+  unipileAccountId: "",
+  cronSecret: "",
+  refreshBatchSize: 10,
+  refreshConcurrency: 2,
+};
+
+describe("ResendOutreachAdapter", () => {
   it("returns provider id on successful send", async () => {
     const send = vi.fn().mockResolvedValue({
       data: { id: "email_123" },
       error: null,
     });
 
-    vi.spyOn(
-      await import("@/lib/config/outreach.config.js"),
-      "getOutreachConfig",
-    ).mockReturnValue({
-      fromEmail: "sales@parijat.com",
-      fromName: "Parijat Sales",
-      sendRatePerMinute: 50,
-      resendApiKey: "re_test",
-      resendWebhookSecret: "",
-      cronSecret: "",
-      refreshBatchSize: 10,
-      refreshConcurrency: 2,
-    });
+    vi.spyOn(await import("@/lib/config/outreach.config.js"), "getOutreachConfig").mockReturnValue(
+      baseConfig,
+    );
 
-    const adapter = new ResendEmailAdapter();
+    const adapter = new ResendOutreachAdapter();
     Object.assign(adapter, {
       client: { emails: { send } },
       fromEmail: "sales@parijat.com",
@@ -30,7 +38,8 @@ describe("ResendEmailAdapter", () => {
     });
 
     const result = await adapter.send({
-      to: "lead@acme.fi",
+      channel: "EMAIL",
+      toAddress: "lead@acme.fi",
       toName: "Lead",
       subject: "Hello",
       bodyHtml: "<p>Hello</p>",
@@ -47,21 +56,11 @@ describe("ResendEmailAdapter", () => {
       error: { message: "Invalid API key" },
     });
 
-    vi.spyOn(
-      await import("@/lib/config/outreach.config.js"),
-      "getOutreachConfig",
-    ).mockReturnValue({
-      fromEmail: "sales@parijat.com",
-      fromName: "Parijat Sales",
-      sendRatePerMinute: 50,
-      resendApiKey: "re_test",
-      resendWebhookSecret: "",
-      cronSecret: "",
-      refreshBatchSize: 10,
-      refreshConcurrency: 2,
-    });
+    vi.spyOn(await import("@/lib/config/outreach.config.js"), "getOutreachConfig").mockReturnValue(
+      baseConfig,
+    );
 
-    const adapter = new ResendEmailAdapter();
+    const adapter = new ResendOutreachAdapter();
     Object.assign(adapter, {
       client: { emails: { send } },
       fromEmail: "sales@parijat.com",
@@ -70,7 +69,8 @@ describe("ResendEmailAdapter", () => {
 
     await expect(
       adapter.send({
-        to: "lead@acme.fi",
+        channel: "EMAIL",
+        toAddress: "lead@acme.fi",
         subject: "Hello",
         bodyHtml: "<p>Hello</p>",
         bodyText: "Hello",

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { apiFetch } from "@/lib/api/browser-client";
 import { resolveOutreachBodyHtml } from "@/lib/validations/outreach-message.schema";
+import type { OutreachChannelValue } from "@/lib/outreach/channel-labels";
+import { ChannelSelector } from "@/components/outreach/ChannelSelector";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -26,6 +28,7 @@ export function CampaignCreateModal({
   onClose,
   onCampaignCreated,
 }: CampaignCreateModalProps) {
+  const [channel, setChannel] = useState<OutreachChannelValue>("EMAIL");
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [bodyText, setBodyText] = useState("");
@@ -37,8 +40,13 @@ export function CampaignCreateModal({
   }
 
   async function handleSubmit(sendAfterCreate: boolean) {
-    if (!name.trim() || !subject.trim() || !bodyText.trim()) {
-      setError("Campaign name, subject, and message are required.");
+    if (!name.trim() || !bodyText.trim()) {
+      setError("Campaign name and message are required.");
+      return;
+    }
+
+    if (channel === "EMAIL" && !subject.trim()) {
+      setError("Subject is required for email campaigns.");
       return;
     }
 
@@ -50,8 +58,10 @@ export function CampaignCreateModal({
         method: "POST",
         body: JSON.stringify({
           name: name.trim(),
-          subject: subject.trim(),
-          bodyHtml: resolveOutreachBodyHtml(bodyText.trim(), null),
+          channel,
+          subject: channel === "EMAIL" ? subject.trim() : "",
+          bodyHtml:
+            channel === "EMAIL" ? resolveOutreachBodyHtml(bodyText.trim(), null) : "",
           bodyText: bodyText.trim(),
           searchResultIds,
         }),
@@ -99,6 +109,11 @@ export function CampaignCreateModal({
           </Button>
         </div>
 
+        <div className="mb-4">
+          <p className="mb-2 text-sm font-medium text-slate-700">Channel</p>
+          <ChannelSelector value={channel} onChange={setChannel} disabled={loading} />
+        </div>
+
         {error ? <Alert variant="error">{error}</Alert> : null}
 
         <div className="mt-4 space-y-3">
@@ -108,12 +123,14 @@ export function CampaignCreateModal({
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
-          <Input
-            id="campaign-subject"
-            label="Subject"
-            value={subject}
-            onChange={(event) => setSubject(event.target.value)}
-          />
+          {channel === "EMAIL" ? (
+            <Input
+              id="campaign-subject"
+              label="Subject"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+            />
+          ) : null}
           <Textarea
             id="campaign-body"
             label="Message"

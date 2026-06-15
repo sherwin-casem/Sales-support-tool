@@ -7,6 +7,7 @@ export interface OutreachMessageRecord {
   companyId: string;
   searchResultId: string | null;
   channel: OutreachChannel;
+  toAddress: string | null;
   subject: string;
   bodyText: string;
   bodyHtml: string | null;
@@ -23,6 +24,7 @@ export class OutreachRepository {
     companyId: string;
     searchResultId?: string | null;
     channel: OutreachChannel;
+    toAddress?: string | null;
     subject: string;
     bodyText: string;
     bodyHtml?: string | null;
@@ -37,6 +39,7 @@ export class OutreachRepository {
         companyId: input.companyId,
         searchResultId: input.searchResultId ?? null,
         channel: input.channel,
+        toAddress: input.toAddress ?? null,
         subject: input.subject,
         bodyText: input.bodyText,
         bodyHtml: input.bodyHtml ?? null,
@@ -68,6 +71,7 @@ function mapMessage(row: {
   companyId: string;
   searchResultId: string | null;
   channel: OutreachChannel;
+  toAddress: string | null;
   subject: string;
   bodyText: string;
   bodyHtml: string | null;
@@ -83,6 +87,7 @@ function mapMessage(row: {
     companyId: row.companyId,
     searchResultId: row.searchResultId,
     channel: row.channel,
+    toAddress: row.toAddress,
     subject: row.subject,
     bodyText: row.bodyText,
     bodyHtml: row.bodyHtml,

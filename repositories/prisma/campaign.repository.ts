@@ -1,4 +1,4 @@
-import type { CampaignStatus, Prisma, RecipientStatus } from "@prisma/client";
+import type { CampaignStatus, OutreachChannel, Prisma, RecipientStatus } from "@prisma/client";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
 
 export interface CampaignRecord {
@@ -6,10 +6,12 @@ export interface CampaignRecord {
   userId: string;
   organizationId: string;
   name: string;
+  channel: OutreachChannel;
   status: CampaignStatus;
   subject: string;
   bodyHtml: string;
   bodyText: string;
+  outreachMessageId: string | null;
   scheduledAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -22,13 +24,17 @@ export interface CampaignRecipientRecord {
   campaignId: string;
   companyId: string;
   searchResultId: string | null;
+  channel: OutreachChannel;
+  toAddress: string;
   toEmail: string;
   toName: string | null;
   status: RecipientStatus;
   providerId: string | null;
+  providerMetadata: Record<string, unknown> | null;
   sentAt: Date | null;
   deliveredAt: Date | null;
   openedAt: Date | null;
+  readAt: Date | null;
   clickedAt: Date | null;
   repliedAt: Date | null;
   bouncedAt: Date | null;
@@ -40,13 +46,17 @@ export class CampaignRepository {
     userId: string;
     organizationId: string;
     name: string;
+    channel: OutreachChannel;
     subject: string;
     bodyHtml: string;
     bodyText: string;
+    outreachMessageId?: string | null;
     recipients: Array<{
       companyId: string;
       searchResultId?: string | null;
-      toEmail: string;
+      channel: OutreachChannel;
+      toAddress: string;
+      toEmail?: string | null;
       toName?: string | null;
     }>;
   }): Promise<{ campaign: CampaignRecord; recipients: CampaignRecipientRecord[] }> {
@@ -57,14 +67,18 @@ export class CampaignRepository {
         userId: input.userId,
         organizationId: input.organizationId,
         name: input.name,
+        channel: input.channel,
         subject: input.subject,
         bodyHtml: input.bodyHtml,
         bodyText: input.bodyText,
+        outreachMessageId: input.outreachMessageId ?? null,
         recipients: {
           create: input.recipients.map((recipient) => ({
             companyId: recipient.companyId,
             searchResultId: recipient.searchResultId ?? null,
-            toEmail: recipient.toEmail,
+            channel: recipient.channel,
+            toAddress: recipient.toAddress,
+            toEmail: recipient.toEmail ?? recipient.toAddress,
             toName: recipient.toName ?? null,
           })),
         },
@@ -125,9 +139,11 @@ export class CampaignRepository {
     status: RecipientStatus,
     fields: Partial<{
       providerId: string;
+      providerMetadata: Prisma.InputJsonValue;
       sentAt: Date;
       deliveredAt: Date;
       openedAt: Date;
+      readAt: Date;
       clickedAt: Date;
       repliedAt: Date;
       bouncedAt: Date;
@@ -181,6 +197,24 @@ export class CampaignRepository {
     }
     return counts;
   }
+
+  async createDeliveryEvent(input: {
+    recipientId: string;
+    provider: string;
+    eventType: string;
+    payload: Prisma.InputJsonValue;
+    occurredAt: Date;
+  }): Promise<void> {
+    await getPrismaClient().deliveryEvent.create({
+      data: {
+        recipientId: input.recipientId,
+        provider: input.provider,
+        eventType: input.eventType,
+        payload: input.payload,
+        occurredAt: input.occurredAt,
+      },
+    });
+  }
 }
 
 function mapCampaign(row: {
@@ -188,10 +222,12 @@ function mapCampaign(row: {
   userId: string;
   organizationId: string;
   name: string;
+  channel: OutreachChannel;
   status: CampaignStatus;
   subject: string;
   bodyHtml: string;
   bodyText: string;
+  outreachMessageId: string | null;
   scheduledAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -206,19 +242,29 @@ function mapRecipient(row: {
   campaignId: string;
   companyId: string;
   searchResultId: string | null;
+  channel: OutreachChannel;
+  toAddress: string;
   toEmail: string;
   toName: string | null;
   status: RecipientStatus;
   providerId: string | null;
+  providerMetadata: Prisma.JsonValue;
   sentAt: Date | null;
   deliveredAt: Date | null;
   openedAt: Date | null;
+  readAt: Date | null;
   clickedAt: Date | null;
   repliedAt: Date | null;
   bouncedAt: Date | null;
   errorMessage: string | null;
 }): CampaignRecipientRecord {
-  return { ...row };
+  return {
+    ...row,
+    providerMetadata:
+      row.providerMetadata && typeof row.providerMetadata === "object" && !Array.isArray(row.providerMetadata)
+        ? (row.providerMetadata as Record<string, unknown>)
+        : null,
+  };
 }
 
 let cachedRepository: CampaignRepository | undefined;

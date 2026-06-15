@@ -4,8 +4,9 @@ import type { OpenAIClientPort } from "@/lib/config/openai.client.js";
 import { aiLogger } from "@/lib/logging/logger.js";
 import { wrapUntrustedContent } from "@/lib/security/prompt-safety.js";
 import {
-  OUTREACH_MESSAGE_JSON_SCHEMA,
+  getOutreachMessageJsonSchema,
   OutreachMessageOutputSchema,
+  validateOutreachMessageOutput,
 } from "@/lib/validations/outreach-message.schema.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import { AgentError } from "@/types/agents/agent-error.types.js";
@@ -58,6 +59,9 @@ export class OutreachMessageAgent
         }),
       ]);
 
+      const channel = (input.channel ?? "EMAIL") as "EMAIL" | "WHATSAPP" | "LINKEDIN";
+      const schema = getOutreachMessageJsonSchema(channel);
+
       const content = await this.openai.createStructuredCompletion({
         model: this.options.model,
         messages: [
@@ -65,11 +69,23 @@ export class OutreachMessageAgent
           { role: "user", content: userPrompt },
         ],
         schemaName: SCHEMA_NAME,
-        schema: OUTREACH_MESSAGE_JSON_SCHEMA,
+        schema,
       });
 
       const parsed = JSON.parse(content) as unknown;
-      const validated = OutreachMessageOutputSchema.safeParse(parsed);
+      const parsedOutput = OutreachMessageOutputSchema.safeParse(parsed);
+
+      if (!parsedOutput.success) {
+        return err(
+          new AgentError(
+            "VALIDATION_ERROR",
+            parsedOutput.error.issues.map((issue) => issue.message).join("; "),
+            parsedOutput.error,
+          ),
+        );
+      }
+
+      const validated = validateOutreachMessageOutput(channel, parsedOutput.data);
 
       if (!validated.success) {
         return err(

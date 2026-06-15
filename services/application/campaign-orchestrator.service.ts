@@ -1,29 +1,38 @@
 import { logger } from "@/lib/logging/logger.js";
-import { getOutreachConfig } from "@/lib/config/outreach.config.js";
-import { validatePersonalEmail } from "@/lib/validations/lead-contact.validation.js";
+import {
+  getChannelRatePerMinute,
+  getOutreachConfig,
+} from "@/lib/config/outreach.config.js";
 import { getCampaignRepository } from "@/repositories/prisma/campaign.repository.js";
 import { getCompanyRepository } from "@/repositories/prisma/company.repository.js";
-import { getResendEmailAdapter } from "@/services/infrastructure/email/resend-email.adapter.js";
-import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
+import { getDeliveryAdapter } from "@/services/infrastructure/outreach/delivery-adapter.registry.js";
+import type { OutreachDeliveryPort } from "@/services/infrastructure/outreach/outreach-delivery.port.js";
+import {
+  resolveRecipientForChannel,
+} from "@/services/domain/outreach/recipient-resolver.service.js";
 
-function resolveRecipientEmail(profile: ExtractedCompany): string | null {
-  return (
-    validatePersonalEmail(profile.decisionMakerEmail, profile.email) ??
-    validatePersonalEmail(profile.email)
-  );
+export interface CampaignOrchestratorDependencies {
+  getDeliveryAdapter?: typeof getDeliveryAdapter;
+  getOutreachConfig?: typeof getOutreachConfig;
 }
 
 export class CampaignOrchestratorService {
+  constructor(private readonly deps: CampaignOrchestratorDependencies = {}) {}
+
   async sendCampaign(campaignId: string, userId: string): Promise<void> {
     const campaignRepository = getCampaignRepository();
     const companyRepository = getCompanyRepository();
-    const emailAdapter = getResendEmailAdapter();
-    const config = getOutreachConfig();
+    const config = (this.deps.getOutreachConfig ?? getOutreachConfig)();
+    const resolveAdapter = this.deps.getDeliveryAdapter ?? getDeliveryAdapter;
 
     const campaign = await campaignRepository.findById(campaignId);
 
     if (!campaign || campaign.userId !== userId) {
       throw new Error("Campaign not found");
+    }
+
+    if (campaign.status === "PAUSED") {
+      return;
     }
 
     if (campaign.status !== "RUNNING") {
@@ -32,12 +41,22 @@ export class CampaignOrchestratorService {
       });
     }
 
+    const adapter = resolveAdapter(campaign.channel);
     const pending = await campaignRepository.listPendingRecipients(campaignId);
-    const delayMs = Math.ceil(60_000 / Math.max(1, config.sendRatePerMinute));
+    const delayMs = Math.ceil(
+      60_000 / Math.max(1, getChannelRatePerMinute(campaign.channel, config)),
+    );
     let sentCount = 0;
     let failedCount = 0;
 
     for (const recipient of pending) {
+      const latestCampaign = await campaignRepository.findById(campaignId);
+
+      if (!latestCampaign || latestCampaign.status === "PAUSED") {
+        logger.info("Campaign send paused", { campaignId });
+        return;
+      }
+
       try {
         const detail = await companyRepository.findDetailForUser(userId, recipient.companyId);
         const profile = detail?.profile?.structuredData;
@@ -50,19 +69,20 @@ export class CampaignOrchestratorService {
           continue;
         }
 
-        const validatedEmail = resolveRecipientEmail(profile) ?? recipient.toEmail;
+        const resolved =
+          resolveRecipientForChannel(profile, campaign.channel) ??
+          ({
+            channel: campaign.channel,
+            toAddress: recipient.toAddress,
+            toName: recipient.toName,
+            toEmail: recipient.toEmail || null,
+          } as const);
 
-        const result = await emailAdapter.send({
-          to: validatedEmail,
-          toName: recipient.toName,
-          subject: campaign.subject,
-          bodyHtml: campaign.bodyHtml,
-          bodyText: campaign.bodyText,
-          tags: { campaignId, recipientId: recipient.id },
-        });
+        const result = await this.sendViaAdapter(adapter, campaign, recipient.id, resolved);
 
         await campaignRepository.updateRecipientStatus(recipient.id, "SENT", {
           providerId: result.providerId,
+          providerMetadata: result.metadata ?? undefined,
           sentAt: new Date(),
         });
         sentCount += 1;
@@ -84,10 +104,60 @@ export class CampaignOrchestratorService {
 
     logger.info("Campaign send completed", {
       campaignId,
+      channel: campaign.channel,
       sentCount,
       failedCount,
       status: finalStatus,
     });
+  }
+
+  private async sendViaAdapter(
+    adapter: OutreachDeliveryPort,
+    campaign: {
+      id: string;
+      channel: "EMAIL" | "WHATSAPP" | "LINKEDIN";
+      subject: string;
+      bodyHtml: string;
+      bodyText: string;
+    },
+    recipientId: string,
+    resolved: {
+      toAddress: string;
+      toName: string | null;
+    },
+  ) {
+    const tags = { campaignId: campaign.id, recipientId };
+
+    switch (campaign.channel) {
+      case "EMAIL":
+        return adapter.send({
+          channel: "EMAIL",
+          toAddress: resolved.toAddress,
+          toName: resolved.toName,
+          subject: campaign.subject,
+          bodyHtml: campaign.bodyHtml,
+          bodyText: campaign.bodyText,
+          tags,
+        });
+      case "WHATSAPP":
+        return adapter.send({
+          channel: "WHATSAPP",
+          toAddress: resolved.toAddress,
+          toName: resolved.toName,
+          bodyText: campaign.bodyText,
+          tags,
+        });
+      case "LINKEDIN":
+        return adapter.send({
+          channel: "LINKEDIN",
+          toAddress: resolved.toAddress,
+          toName: resolved.toName,
+          bodyText: campaign.bodyText,
+          tags,
+        });
+      default:
+        throw new Error(`Unsupported channel: ${campaign.channel}`);
+    }
   }
 }
 
@@ -103,4 +173,10 @@ export function getCampaignOrchestratorService(): CampaignOrchestratorService {
   }
 
   return cachedService;
+}
+
+export function createCampaignOrchestratorService(
+  deps: CampaignOrchestratorDependencies,
+): CampaignOrchestratorService {
+  return new CampaignOrchestratorService(deps);
 }

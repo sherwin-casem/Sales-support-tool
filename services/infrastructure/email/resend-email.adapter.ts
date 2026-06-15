@@ -5,36 +5,24 @@ import type {
   SendEmailInput,
   SendEmailResult,
 } from "@/services/infrastructure/email/email-delivery.port.js";
+import { getResendOutreachAdapter } from "@/services/infrastructure/outreach/adapters/resend.adapter.js";
 
+/** @deprecated Use getResendOutreachAdapter from outreach adapters. */
 export class ResendEmailAdapter implements EmailDeliveryPort {
-  private readonly client: Resend;
-  private readonly fromEmail: string;
-  private readonly fromName: string;
-
-  constructor() {
-    const config = getOutreachConfig();
-    this.client = new Resend(config.resendApiKey);
-    this.fromEmail = config.fromEmail;
-    this.fromName = config.fromName;
-  }
+  private readonly delegate = getResendOutreachAdapter();
 
   async send(input: SendEmailInput): Promise<SendEmailResult> {
-    const response = await this.client.emails.send({
-      from: `${this.fromName} <${this.fromEmail}>`,
-      to: input.toName ? `${input.toName} <${input.to}>` : input.to,
+    const result = await this.delegate.send({
+      channel: "EMAIL",
+      toAddress: input.to,
+      toName: input.toName,
       subject: input.subject,
-      html: input.bodyHtml,
-      text: input.bodyText,
-      tags: input.tags
-        ? Object.entries(input.tags).map(([name, value]) => ({ name, value }))
-        : undefined,
+      bodyHtml: input.bodyHtml,
+      bodyText: input.bodyText,
+      tags: input.tags,
     });
 
-    if (response.error || !response.data?.id) {
-      throw new Error(response.error?.message ?? "Resend send failed");
-    }
-
-    return { providerId: response.data.id };
+    return { providerId: result.providerId };
   }
 }
 
@@ -47,3 +35,5 @@ export function getResendEmailAdapter(): ResendEmailAdapter {
 
   return cachedAdapter;
 }
+
+export { Resend };
