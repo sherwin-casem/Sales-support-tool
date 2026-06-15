@@ -419,3 +419,20 @@ export function validatePhone(value: string | null | undefined): string | null {
 
   return formatPhoneForDisplay(trimmed);
 }
+
+/** Normalizes a validated phone to compact E.164 (+digits) for WhatsApp/API delivery. */
+export function normalizeToE164Phone(value: string | null | undefined): string | null {
+  const validated = validatePhone(value);
+
+  if (!validated) {
+    return null;
+  }
+
+  const digits = normalizePhoneDigits(validated);
+
+  if (!digits) {
+    return null;
+  }
+
+  return digits.startsWith("+") ? digits : `+${digits}`;
+}

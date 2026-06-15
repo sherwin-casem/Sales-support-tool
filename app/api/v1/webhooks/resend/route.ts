@@ -1,8 +1,7 @@
-import { ApiError } from "@/lib/api/api-error.js";
 import { jsonResponse } from "@/lib/api/http-response";
 import { getOutreachConfig } from "@/lib/config/outreach.config.js";
 import { verifyResendWebhookSignature } from "@/lib/security/resend-webhook.js";
-import { getCampaignRepository } from "@/repositories/prisma/campaign.repository";
+import { getDeliveryTrackingService } from "@/services/application/delivery-tracking.service.js";
 import type { RecipientStatus } from "@prisma/client";
 
 interface ResendWebhookEvent {
@@ -13,13 +12,16 @@ interface ResendWebhookEvent {
   };
 }
 
-const EVENT_STATUS_MAP: Record<string, RecipientStatus> = {
-  "email.sent": "SENT",
-  "email.delivered": "DELIVERED",
-  "email.opened": "OPENED",
-  "email.clicked": "CLICKED",
-  "email.bounced": "BOUNCED",
-  "email.complained": "UNSUBSCRIBED",
+const EVENT_STATUS_MAP: Record<
+  string,
+  { status: RecipientStatus; field?: "deliveredAt" | "openedAt" | "clickedAt" | "bouncedAt" }
+> = {
+  "email.sent": { status: "SENT" },
+  "email.delivered": { status: "DELIVERED", field: "deliveredAt" },
+  "email.opened": { status: "OPENED", field: "openedAt" },
+  "email.clicked": { status: "CLICKED", field: "clickedAt" },
+  "email.bounced": { status: "BOUNCED", field: "bouncedAt" },
+  "email.complained": { status: "UNSUBSCRIBED" },
 };
 
 export async function POST(request: Request) {
@@ -43,25 +45,23 @@ export async function POST(request: Request) {
     return jsonResponse({ received: true });
   }
 
-  const recipient = await getCampaignRepository().findRecipientByProviderId(providerId);
+  const mapping = EVENT_STATUS_MAP[payload.type];
 
-  if (!recipient) {
-    return jsonResponse({ received: true });
-  }
-
-  const status = EVENT_STATUS_MAP[payload.type];
-
-  if (!status) {
+  if (!mapping) {
     return jsonResponse({ received: true });
   }
 
   const timestamp = payload.data.created_at ? new Date(payload.data.created_at) : new Date();
+  const fields = mapping.field ? { [mapping.field]: timestamp } : undefined;
 
-  await getCampaignRepository().updateRecipientStatus(recipient.id, status, {
-    ...(status === "DELIVERED" ? { deliveredAt: timestamp } : {}),
-    ...(status === "OPENED" ? { openedAt: timestamp } : {}),
-    ...(status === "CLICKED" ? { clickedAt: timestamp } : {}),
-    ...(status === "BOUNCED" ? { bouncedAt: timestamp } : {}),
+  await getDeliveryTrackingService().applyDeliveryEvent({
+    provider: "resend",
+    providerId,
+    eventType: payload.type,
+    status: mapping.status,
+    timestamp,
+    payload: payload as unknown as Record<string, unknown>,
+    fields,
   });
 
   return jsonResponse({ received: true });

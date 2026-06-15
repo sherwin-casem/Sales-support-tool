@@ -1,17 +1,8 @@
 import { requireUser, withApiHandler } from "@/lib/api/handler";
 import { jsonResponse } from "@/lib/api/http-response";
 import { readJsonBodyWithSchema } from "@/lib/api/parse-request";
+import { CreateCampaignSchema } from "@/lib/validations/campaign.schema.js";
 import { getCampaignApiService } from "@/services/application/campaign-api.factory";
-import { z } from "zod";
-
-const CreateCampaignSchema = z.object({
-  name: z.string().min(1).max(200),
-  subject: z.string().min(1).max(500),
-  bodyHtml: z.string().min(1),
-  bodyText: z.string().min(1),
-  companyIds: z.array(z.string().uuid()).optional(),
-  searchResultIds: z.array(z.string().uuid()).optional(),
-});
 
 const handleCreate = withApiHandler(
   async (request, context) => {

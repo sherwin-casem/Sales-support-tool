@@ -4,8 +4,10 @@ import { getPrismaClient } from "@/lib/db/prisma.client.js";
 import {
   GenerateOutreachMessageSchema,
   resolveOutreachBodyHtml,
+  resolveOutreachSubject,
   type GenerateOutreachMessageInput,
 } from "@/lib/validations/outreach-message.schema.js";
+import { resolveRecipientForChannel } from "@/services/domain/outreach/recipient-resolver.service.js";
 import { getIntentRepository } from "@/repositories/prisma/intent.repository.js";
 import { getOutreachRepository } from "@/repositories/prisma/outreach.repository.js";
 import { getUserRepository } from "@/repositories/prisma/user.repository.js";
@@ -57,17 +59,22 @@ export class OutreachMessageApiService {
       });
 
       if (result.ok) {
-        const bodyHtml = resolveOutreachBodyHtml(
-          result.value.bodyText,
-          result.value.bodyHtml,
+        const resolved = resolveRecipientForChannel(
+          detail.profile.structuredData,
+          input.channel,
         );
+        const bodyHtml =
+          input.channel === "EMAIL"
+            ? resolveOutreachBodyHtml(result.value.bodyText, result.value.bodyHtml)
+            : null;
 
         const saved = await outreachRepository.createMessage({
           userId: user.id,
           companyId: input.companyId,
           searchResultId: input.searchResultId,
           channel: input.channel,
-          subject: result.value.subject,
+          toAddress: resolved?.toAddress ?? null,
+          subject: resolveOutreachSubject(input.channel, result.value.subject),
           bodyText: result.value.bodyText,
           bodyHtml,
           tone: input.tone,
@@ -81,6 +88,7 @@ export class OutreachMessageApiService {
           companyId: saved.companyId,
           searchResultId: saved.searchResultId,
           channel: saved.channel,
+          toAddress: saved.toAddress,
           subject: saved.subject,
           bodyText: saved.bodyText,
           bodyHtml: saved.bodyHtml,
@@ -102,6 +110,7 @@ export class OutreachMessageApiService {
       companyId: message.companyId,
       searchResultId: message.searchResultId,
       channel: message.channel,
+      toAddress: message.toAddress,
       subject: message.subject,
       bodyText: message.bodyText,
       bodyHtml: message.bodyHtml,
