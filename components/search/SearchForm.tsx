@@ -66,7 +66,8 @@ export function SearchForm() {
         <Select
           id={limitFieldId}
           name="companyLimit"
-          label="Company limit"
+          label="Target leads"
+          hint="Keep discovering until this many enriched leads appear in results."
           value={companyLimit}
           onChange={(event) => setCompanyLimit(event.target.value)}
           error={fieldErrors.companyLimit}
@@ -75,7 +76,7 @@ export function SearchForm() {
           <option value="">No limit</option>
           {COMPANY_LIMIT_OPTIONS.map((limit) => (
             <option key={limit} value={limit}>
-              {limit} companies
+              {limit} leads
             </option>
           ))}
         </Select>

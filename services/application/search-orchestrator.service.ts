@@ -1,6 +1,6 @@
 import { SearchJobStatus, SearchResultStage } from "@prisma/client";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
-import { isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
+import { getEnrichmentDeficit, isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
 import { computeExtractionCompleteness } from "@/lib/validations/company-extraction.schema.js";
 import { logger } from "@/lib/logging/logger.js";
 import { runWithConcurrency } from "@/lib/utils/concurrency.js";
@@ -97,6 +97,8 @@ interface SavedProfileMeta {
 export class SearchOrchestrator {
   private readonly enrichmentConcurrency: number;
   private readonly minProfileCompleteness: number;
+  private readonly discoveryTargetMaxRounds: number;
+  private readonly discoveryTargetMaxAttemptMultiplier: number;
 
   constructor(
     private readonly deps: SearchOrchestratorDependencies,
@@ -108,6 +110,9 @@ export class SearchOrchestrator {
       options.enrichmentConcurrency ?? pipelineConfig.SEARCH_ENRICHMENT_CONCURRENCY;
     this.minProfileCompleteness =
       options.minProfileCompleteness ?? pipelineConfig.SEARCH_MIN_PROFILE_COMPLETENESS;
+    this.discoveryTargetMaxRounds = pipelineConfig.DISCOVERY_TARGET_MAX_ROUNDS;
+    this.discoveryTargetMaxAttemptMultiplier =
+      pipelineConfig.DISCOVERY_TARGET_MAX_ATTEMPT_MULTIPLIER;
   }
 
   async run(
@@ -175,68 +180,34 @@ export class SearchOrchestrator {
 
       await this.deps.searchRepository.updateJobCriteria(searchJobId, criteria);
 
-      const discoveriesResult = await this.discoverCompanies(
-        input.query,
-        criteria,
-        input.companyLimit ?? job.companyLimit,
-      );
+      const companyLimit = input.companyLimit ?? job.companyLimit;
 
-      if (!discoveriesResult.ok) {
-        await this.failJob(searchJobId, discoveriesResult.error.message);
-        return err(discoveriesResult.error);
+      const pipelineResult = isUnlimitedCompanyLimit(companyLimit)
+        ? await this.runUnlimitedSearch(searchJobId, input.query, criteria, summary, failures)
+        : await this.runTargetedSearch(
+            searchJobId,
+            input.query,
+            criteria,
+            companyLimit,
+            summary,
+            failures,
+          );
+
+      if (!pipelineResult.ok) {
+        await this.failJob(searchJobId, pipelineResult.error.message);
+        return err(pipelineResult.error);
       }
-
-      if (discoveriesResult.value.length === 0) {
-        const message = buildNoCompaniesDiscoveredMessage(input.query, criteria);
-        await this.failJob(searchJobId, message);
-        return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
-      }
-
-      const discoveryPersist = await this.deps.searchRepository.addDiscoveredCompanies(
-        searchJobId,
-        discoveriesResult.value.map((company, index) => ({
-          companyName: company.companyName,
-          website: company.website,
-          rank: index + 1,
-          discoverySource: "discovery_agent",
-        })),
-      );
-
-      summary.discovered = discoveryPersist.searchResults.length;
-      summary.skippedDuplicates = discoveryPersist.skippedDuplicates;
-
-      if (summary.discovered === 0) {
-        const message = "All discovered companies were duplicates for this search job";
-        await this.failJob(searchJobId, message);
-        return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
-      }
-
-      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.ENRICHING);
-
-      const searchResults = await this.deps.searchRepository.findResultsByJobId(searchJobId);
-
-      logger.info("SearchOrchestrator hybrid enrichment stage started", {
-        searchJobId,
-        companyCount: searchResults.length,
-        enrichmentConcurrency: this.enrichmentConcurrency,
-      });
-
-      const enrichmentOutcomes = await runWithConcurrency(
-        searchResults,
-        this.enrichmentConcurrency,
-        (searchResult) => this.processLeadHybrid(searchResult),
-      );
-
-      mergeStageOutcomes(summary, failures, enrichmentOutcomes);
 
       const finalStatus =
         summary.enriched > 0
           ? SearchJobStatus.COMPLETED
           : SearchJobStatus.FAILED;
 
+      const targetLimit = isUnlimitedCompanyLimit(companyLimit) ? null : companyLimit;
+
       await this.deps.searchRepository.updateJobStatus(searchJobId, finalStatus, {
         completedAt: new Date(),
-        errorMessage: buildJobCompletionMessage(summary),
+        errorMessage: buildJobCompletionMessage(summary, targetLimit),
       });
 
       const durationMs = Date.now() - startedAt;
@@ -295,10 +266,177 @@ export class SearchOrchestrator {
     return ok(parsed.value);
   }
 
+  private async runUnlimitedSearch(
+    searchJobId: string,
+    query: string,
+    criteria: ParsedQuery,
+    summary: SearchOrchestrationSummary,
+    failures: SearchStageFailure[],
+  ): Promise<Result<void, SearchOrchestratorError>> {
+    const discoveriesResult = await this.discoverCompanies(query, criteria, null);
+
+    if (!discoveriesResult.ok) {
+      return err(discoveriesResult.error);
+    }
+
+    if (discoveriesResult.value.length === 0) {
+      const message = buildNoCompaniesDiscoveredMessage(query, criteria);
+      return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
+    }
+
+    const discoveryPersist = await this.deps.searchRepository.addDiscoveredCompanies(
+      searchJobId,
+      discoveriesResult.value.map((company, index) => ({
+        companyName: company.companyName,
+        website: company.website,
+        rank: index + 1,
+        discoverySource: "discovery_agent",
+      })),
+    );
+
+    summary.discovered = discoveryPersist.searchResults.length;
+    summary.skippedDuplicates = discoveryPersist.skippedDuplicates;
+
+    if (summary.discovered === 0) {
+      const message = "All discovered companies were duplicates for this search job";
+      return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
+    }
+
+    await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.ENRICHING);
+
+    const searchResults = await this.deps.searchRepository.findResultsByJobId(searchJobId);
+
+    logger.info("SearchOrchestrator hybrid enrichment stage started", {
+      searchJobId,
+      companyCount: searchResults.length,
+      enrichmentConcurrency: this.enrichmentConcurrency,
+    });
+
+    const enrichmentOutcomes = await runWithConcurrency(
+      searchResults,
+      this.enrichmentConcurrency,
+      (searchResult) => this.processLeadHybrid(searchResult),
+    );
+
+    mergeStageOutcomes(summary, failures, enrichmentOutcomes);
+
+    return ok(undefined);
+  }
+
+  private async runTargetedSearch(
+    searchJobId: string,
+    query: string,
+    criteria: ParsedQuery,
+    targetLimit: number,
+    summary: SearchOrchestrationSummary,
+    failures: SearchStageFailure[],
+  ): Promise<Result<void, SearchOrchestratorError>> {
+    const maxAttempts = targetLimit * this.discoveryTargetMaxAttemptMultiplier;
+    const attemptedWebsites: string[] = [];
+    let totalAttempted = 0;
+    let nextRank = 1;
+
+    for (let round = 0; round < this.discoveryTargetMaxRounds; round += 1) {
+      const stageCounts = await this.deps.searchRepository.countResultsByStage(searchJobId);
+      const enrichedCount = stageCounts.ENRICHED ?? 0;
+
+      if (enrichedCount >= targetLimit) {
+        break;
+      }
+
+      const deficit = getEnrichmentDeficit(targetLimit, enrichedCount);
+      const remainingBudget = maxAttempts - totalAttempted;
+      const batchSize = Math.min(deficit, remainingBudget);
+
+      if (batchSize <= 0) {
+        break;
+      }
+
+      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.DISCOVERING);
+
+      const discoveriesResult = await this.discoverCompanies(
+        query,
+        criteria,
+        batchSize,
+        attemptedWebsites,
+      );
+
+      if (!discoveriesResult.ok) {
+        if (round === 0 && enrichedCount === 0) {
+          return err(discoveriesResult.error);
+        }
+
+        break;
+      }
+
+      if (discoveriesResult.value.length === 0) {
+        if (round === 0 && enrichedCount === 0) {
+          const message = buildNoCompaniesDiscoveredMessage(query, criteria);
+          return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
+        }
+
+        break;
+      }
+
+      attemptedWebsites.push(...discoveriesResult.value.map((company) => company.website));
+      totalAttempted += discoveriesResult.value.length;
+
+      const discoveryPersist = await this.deps.searchRepository.addDiscoveredCompanies(
+        searchJobId,
+        discoveriesResult.value.map((company, index) => ({
+          companyName: company.companyName,
+          website: company.website,
+          rank: nextRank + index,
+          discoverySource: "discovery_agent",
+        })),
+      );
+
+      nextRank += discoveriesResult.value.length;
+      summary.discovered += discoveryPersist.searchResults.length;
+      summary.skippedDuplicates += discoveryPersist.skippedDuplicates;
+
+      if (discoveryPersist.searchResults.length === 0) {
+        if (round === 0 && enrichedCount === 0) {
+          const message = "All discovered companies were duplicates for this search job";
+          return err(new SearchOrchestratorError("NO_COMPANIES_DISCOVERED", message));
+        }
+
+        break;
+      }
+
+      await this.deps.searchRepository.updateJobStatus(searchJobId, SearchJobStatus.ENRICHING);
+
+      const currentStageCounts =
+        await this.deps.searchRepository.countResultsByStage(searchJobId);
+      const currentEnriched = currentStageCounts.ENRICHED ?? 0;
+      const enrichDeficit = getEnrichmentDeficit(targetLimit, currentEnriched);
+      const toEnrich = discoveryPersist.searchResults.slice(0, enrichDeficit);
+
+      logger.info("SearchOrchestrator targeted enrichment batch started", {
+        searchJobId,
+        round: round + 1,
+        batchCount: toEnrich.length,
+        enrichedCount: currentEnriched,
+        targetLimit,
+      });
+
+      const enrichmentOutcomes = await runWithConcurrency(
+        toEnrich,
+        this.enrichmentConcurrency,
+        (searchResult) => this.processLeadHybrid(searchResult),
+      );
+
+      mergeStageOutcomes(summary, failures, enrichmentOutcomes);
+    }
+
+    return ok(undefined);
+  }
+
   private async discoverCompanies(
     query: string,
     criteria: ParsedQuery,
     limit: number | null,
+    excludedWebsites: string[] = [],
   ): Promise<Result<DiscoveredCompany[], SearchOrchestratorError>> {
     const discoveryInput: CompanyDiscoveryInput = {
       query,
@@ -308,6 +446,10 @@ export class SearchOrchestrator {
 
     if (typeof limit === "number") {
       discoveryInput.limit = limit;
+    }
+
+    if (excludedWebsites.length > 0) {
+      discoveryInput.excludedWebsites = [...excludedWebsites];
     }
 
     const discovered = await this.deps.companyDiscovery.discover(discoveryInput);
@@ -792,17 +934,30 @@ function createEmptySummary(): SearchOrchestrationSummary {
   };
 }
 
-function buildJobCompletionMessage(summary: SearchOrchestrationSummary): string | null {
+function buildJobCompletionMessage(
+  summary: SearchOrchestrationSummary,
+  targetLimit: number | null,
+): string | null {
   if (summary.enriched === 0) {
     return "No leads were fully processed";
   }
 
-  if (summary.removed > 0) {
-    const label = summary.removed === 1 ? "company" : "companies";
-    return `${summary.removed} ${label} could not be enriched and were excluded from results`;
+  const messages: string[] = [];
+
+  if (targetLimit !== null && summary.enriched < targetLimit) {
+    messages.push(
+      `Only ${summary.enriched} of ${targetLimit} target leads were enriched; no more matching companies could be found.`,
+    );
   }
 
-  return null;
+  if (summary.removed > 0) {
+    const label = summary.removed === 1 ? "company" : "companies";
+    messages.push(
+      `${summary.removed} ${label} could not be enriched and were excluded from results`,
+    );
+  }
+
+  return messages.length > 0 ? messages.join(" ") : null;
 }
 
 function buildNoCompaniesDiscoveredMessage(query: string, criteria: ParsedQuery): string {

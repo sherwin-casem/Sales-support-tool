@@ -181,7 +181,7 @@ function createDependencies(
         query: "Find logistics companies in Finland with 50-200 employees",
         criteria: {},
         status: "PENDING",
-        companyLimit: 25,
+        companyLimit: null,
         errorMessage: null,
         startedAt: null,
         completedAt: null,
@@ -196,7 +196,7 @@ function createDependencies(
           query: "Find logistics companies in Finland with 50-200 employees",
           criteria,
           status,
-          companyLimit: 25,
+          companyLimit: null,
           errorMessage: null,
           startedAt: new Date("2026-06-07T12:00:00.000Z"),
           completedAt: status === "COMPLETED" ? new Date("2026-06-07T12:05:00.000Z") : null,
@@ -922,5 +922,217 @@ describe("SearchOrchestrator", () => {
     if (!result.ok) {
       expect(result.error.code).toBe("INVALID_INPUT");
     }
+  });
+
+  it("fills targeted search to the enriched lead limit across discovery rounds", async () => {
+    const secondCompanyId = "00000000-0000-4000-8000-000000000011";
+    const secondSearchResultId = "00000000-0000-4000-8000-000000000041";
+    const firstResult = {
+      id: searchResultId,
+      searchJobId,
+      companyId,
+      stage: "DISCOVERED" as const,
+      rank: 1,
+      discoverySource: "discovery_agent",
+      discoveryUrl: "https://acme.fi",
+      stageError: null,
+      discoveredAt: new Date("2026-06-07T12:00:00.000Z"),
+      completedAt: null,
+      createdAt: new Date("2026-06-07T12:00:00.000Z"),
+      updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+    };
+    const secondResult = {
+      id: secondSearchResultId,
+      searchJobId,
+      companyId: secondCompanyId,
+      stage: "DISCOVERED" as const,
+      rank: 2,
+      discoverySource: "discovery_agent",
+      discoveryUrl: "https://beta.fi",
+      stageError: null,
+      discoveredAt: new Date("2026-06-07T12:00:00.000Z"),
+      completedAt: null,
+      createdAt: new Date("2026-06-07T12:00:00.000Z"),
+      updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+    };
+
+    const deps = createDependencies();
+    let enrichedCount = 0;
+
+    deps.searchRepository.countResultsByStage = vi.fn().mockImplementation(async () => ({
+      ENRICHED: enrichedCount,
+    }));
+
+    deps.companyDiscovery.discover = vi
+      .fn()
+      .mockResolvedValueOnce(ok([{ companyName: "Acme Logistics Oy", website: "https://acme.fi" }]))
+      .mockResolvedValueOnce(ok([{ companyName: "Beta Logistics Oy", website: "https://beta.fi" }]));
+
+    deps.searchRepository.addDiscoveredCompanies = vi
+      .fn()
+      .mockResolvedValueOnce({
+        companies: [],
+        searchResults: [firstResult],
+        skippedDuplicates: 0,
+      })
+      .mockResolvedValueOnce({
+        companies: [],
+        searchResults: [secondResult],
+        skippedDuplicates: 0,
+      });
+
+    deps.leadEnrichment.enrich = vi.fn().mockImplementation(async () => {
+      enrichedCount += 1;
+      return ok({
+        profile: {
+          ...extractedProfile,
+          city: "helsinki",
+          country: "finland",
+          decisionMaker: "Jane Doe, CEO",
+          decisionMakerEmail: "jane@acme.fi",
+          decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
+          linkedInUrl: "https://linkedin.com/company/acme",
+          email: "info@acme.fi",
+        },
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          enrichedAt: "2026-06-07T12:02:00.000Z",
+        },
+      });
+    });
+
+    const orchestrator = new SearchOrchestrator(deps);
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+      companyLimit: 2,
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.status).toBe("COMPLETED");
+      expect(result.value.summary.enriched).toBe(2);
+    }
+
+    expect(deps.companyDiscovery.discover).toHaveBeenCalledTimes(2);
+    expect(deps.companyDiscovery.discover.mock.calls[0]?.[0]).toMatchObject({ limit: 2 });
+    expect(deps.companyDiscovery.discover.mock.calls[1]?.[0]).toMatchObject({
+      limit: 1,
+      excludedWebsites: ["https://acme.fi"],
+    });
+    expect(deps.leadEnrichment.enrich).toHaveBeenCalledTimes(2);
+  });
+
+  it("completes with a warning when targeted search cannot reach the limit", async () => {
+    const deps = createDependencies();
+    let discoverCalls = 0;
+    let enrichedCount = 0;
+
+    deps.searchRepository.countResultsByStage = vi.fn().mockImplementation(async () => ({
+      ENRICHED: enrichedCount,
+    }));
+
+    deps.companyDiscovery.discover = vi.fn().mockImplementation(async () => {
+      discoverCalls += 1;
+
+      if (discoverCalls === 1) {
+        return ok([{ companyName: "Acme Logistics Oy", website: "https://acme.fi" }]);
+      }
+
+      return ok([]);
+    });
+
+    deps.leadEnrichment.enrich = vi.fn().mockImplementation(async () => {
+      enrichedCount += 1;
+      return ok({
+        profile: {
+          ...extractedProfile,
+          city: "helsinki",
+          country: "finland",
+          decisionMaker: "Jane Doe, CEO",
+          decisionMakerEmail: "jane@acme.fi",
+          decisionMakerLinkedInUrl: "https://linkedin.com/in/janedoe",
+          linkedInUrl: "https://linkedin.com/company/acme",
+          email: "info@acme.fi",
+        },
+        meta: {
+          promptVersion: "v1",
+          modelUsed: "gpt-4o",
+          enrichedAt: "2026-06-07T12:02:00.000Z",
+        },
+      });
+    });
+
+    const orchestrator = new SearchOrchestrator(deps);
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+      companyLimit: 10,
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.status).toBe("COMPLETED");
+      expect(result.value.summary.enriched).toBe(1);
+    }
+
+    expect(deps.companyDiscovery.discover).toHaveBeenCalledTimes(2);
+    expect(deps.searchRepository.updateJobStatus).toHaveBeenCalledWith(
+      searchJobId,
+      "COMPLETED",
+      expect.objectContaining({
+        errorMessage:
+          "Only 1 of 10 target leads were enriched; no more matching companies could be found.",
+      }),
+    );
+  });
+
+  it("marks targeted search failed when no leads enrich", async () => {
+    const deps = createDependencies();
+
+    deps.searchRepository.countResultsByStage = vi.fn().mockResolvedValue({ ENRICHED: 0 });
+    deps.leadEnrichment.enrich = vi.fn().mockResolvedValue(
+      err(new LeadEnrichmentError("ENRICHMENT_FAILED", "Web enrichment failed")),
+    );
+    deps.websiteCrawler.crawl = vi.fn().mockResolvedValue(
+      err(new WebsiteCrawlerError("CRAWL_FAILED", "Website crawl failed")),
+    );
+    deps.companyDiscovery.discover = vi
+      .fn()
+      .mockResolvedValueOnce(ok([{ companyName: "Acme Logistics Oy", website: "https://acme.fi" }]))
+      .mockResolvedValueOnce(ok([]));
+
+    const orchestrator = new SearchOrchestrator(deps);
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+      companyLimit: 10,
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.status).toBe("FAILED");
+      expect(result.value.summary.enriched).toBe(0);
+      expect(result.value.summary.removed).toBe(1);
+    }
+  });
+
+  it("runs unlimited search in a single discovery round", async () => {
+    const deps = createDependencies();
+    const orchestrator = new SearchOrchestrator(deps);
+
+    const result = await orchestrator.run({
+      userId,
+      query: "Find logistics companies in Finland with 50-200 employees",
+      companyLimit: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(deps.companyDiscovery.discover).toHaveBeenCalledOnce();
+    expect(deps.companyDiscovery.discover.mock.calls[0]?.[0].limit).toBeUndefined();
   });
 });
