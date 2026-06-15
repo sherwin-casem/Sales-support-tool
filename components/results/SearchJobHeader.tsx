@@ -1,5 +1,6 @@
 import type { GetSearchResponse } from "@/types/api/search.api.types";
 import { formatSearchJobStatus } from "@/lib/results/search-job-status";
+import { isUnlimitedCompanyLimit } from "@/lib/search/company-limit";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -24,13 +25,21 @@ function statusVariant(status: GetSearchResponse["status"]): "default" | "succes
   }
 }
 
+function buildJobDescription(job: GetSearchResponse): string {
+  if (!isUnlimitedCompanyLimit(job.companyLimit)) {
+    return `${job.summary.enriched} / ${job.companyLimit} leads enriched`;
+  }
+
+  return `${job.summary.discovered} companies discovered`;
+}
+
 export function SearchJobHeader({ job, isRefreshing }: SearchJobHeaderProps) {
   return (
     <div className="space-y-4">
       <PageHeader
         eyebrow="Search results"
         title={job.query}
-        description={`${job.summary.discovered} companies discovered`}
+        description={buildJobDescription(job)}
         actions={
           <div className="flex items-center gap-2">
             <Badge variant={statusVariant(job.status)}>
