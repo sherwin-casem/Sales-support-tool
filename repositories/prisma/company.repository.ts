@@ -457,6 +457,26 @@ export class PrismaCompanyRepository implements CompanyRepository {
       })),
     };
   }
+
+  async deleteCompanyAndSearchResults(
+    companyId: string,
+    tx?: DbClient,
+  ): Promise<{ deletedSearchResults: number }> {
+    const client = resolveDbClient(this.prisma, tx);
+
+    try {
+      const { count } = await client.searchResult.deleteMany({ where: { companyId } });
+      await client.company.delete({ where: { id: companyId } });
+
+      return { deletedSearchResults: count };
+    } catch (error) {
+      throw new RepositoryError(
+        "NOT_FOUND",
+        `Company not found: ${companyId}`,
+        error,
+      );
+    }
+  }
 }
 
 function buildCompanyOrderBy(

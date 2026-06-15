@@ -44,4 +44,8 @@ export interface CompanyRepository {
     userId: string,
     searchResultId: string,
   ): Promise<SearchResultCompanyMatch | null>;
+  deleteCompanyAndSearchResults(
+    companyId: string,
+    tx?: DbClient,
+  ): Promise<{ deletedSearchResults: number }>;
 }

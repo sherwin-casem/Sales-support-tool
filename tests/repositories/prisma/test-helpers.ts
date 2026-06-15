@@ -10,14 +10,15 @@ import type {
 type MockFn = ReturnType<typeof vi.fn>;
 
 export type MockPrismaClient = PrismaClient & {
-  company: {
-    findUnique: MockFn;
-    findMany: MockFn;
-    create: MockFn;
-    createMany: MockFn;
-    upsert: MockFn;
-    update: MockFn;
-  };
+    company: {
+      findUnique: MockFn;
+      findMany: MockFn;
+      create: MockFn;
+      createMany: MockFn;
+      upsert: MockFn;
+      update: MockFn;
+      delete: MockFn;
+    };
   companyProfile: {
     findFirst: MockFn;
     findUnique: MockFn;
@@ -33,15 +34,16 @@ export type MockPrismaClient = PrismaClient & {
     updateMany: MockFn;
     count: MockFn;
   };
-  searchResult: {
-    create: MockFn;
-    createMany: MockFn;
-    findMany: MockFn;
-    findUnique: MockFn;
-    update: MockFn;
-    delete: MockFn;
-    groupBy: MockFn;
-  };
+    searchResult: {
+      create: MockFn;
+      createMany: MockFn;
+      findMany: MockFn;
+      findUnique: MockFn;
+      update: MockFn;
+      delete: MockFn;
+      deleteMany: MockFn;
+      groupBy: MockFn;
+    };
   $transaction: MockFn;
   $queryRaw: MockFn;
 };
@@ -191,6 +193,7 @@ export function createMockPrismaClient() {
       createMany: vi.fn(),
       upsert: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     companyProfile: {
       findFirst: vi.fn(),
@@ -213,6 +216,7 @@ export function createMockPrismaClient() {
       findUnique: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      deleteMany: vi.fn(),
       groupBy: vi.fn(),
     },
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>

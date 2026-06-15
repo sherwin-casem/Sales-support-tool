@@ -2,6 +2,7 @@ import {
   createSearchOrchestrator,
   type SearchOrchestratorDependencies,
 } from "@/services/application/search-orchestrator.service.js";
+import { createContactlessLeadRemovalService } from "@/services/application/contactless-lead-removal.service.js";
 import { getCompanyRepository } from "@/repositories/prisma/company.repository.js";
 import { getSearchRepository } from "@/repositories/prisma/search.repository.js";
 import { getCompanyDiscoveryService } from "@/services/infrastructure/discovery/company-discovery.service.js";
@@ -22,6 +23,7 @@ export function createDefaultSearchOrchestratorDependencies(): SearchOrchestrato
     leadEnrichment: getLeadEnrichmentService(),
     searchRepository: getSearchRepository(),
     companyRepository: getCompanyRepository(),
+    contactlessLeadRemoval: createContactlessLeadRemovalService(getCompanyRepository()),
   };
 }
 

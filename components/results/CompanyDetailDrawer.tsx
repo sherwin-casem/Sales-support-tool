@@ -19,6 +19,7 @@ import {
   hasDecisionMakerContactDetails,
   resolveDecisionMakerContact,
 } from "@/lib/results/decision-maker-contact";
+import { hasCompanyContactDetails } from "@/lib/results/lead-contact-eligibility";
 import {
   normalizePhoneHref,
   resolveDisplayEmail,
@@ -135,11 +136,7 @@ function CompanyOverviewContent({
   searchCriteria: ParsedQuery | null;
   onCampaignCreated?: (campaignId: string) => void;
 }) {
-  const hasCompanyContact =
-    Boolean(companyEmail) ||
-    Boolean(companyPhone) ||
-    hasDisplayValue(profile?.linkedInUrl) ||
-    hasDisplayValue(profile?.xUrl);
+  const hasCompanyContact = profile ? hasCompanyContactDetails(profile) : false;
 
   const companyLabel = getCompanyDisplayName(
     profile,
