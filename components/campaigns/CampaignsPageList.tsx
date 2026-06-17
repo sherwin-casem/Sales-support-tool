@@ -35,6 +35,7 @@ interface CampaignsPageListProps {
   items: CampaignsPageItem[];
   deletingId: string | null;
   onDeleteSavedSearch: (savedSearchId: string) => void;
+  onDeleteCampaign: (campaignId: string) => void;
 }
 
 export function buildCampaignsPageItems(
@@ -63,6 +64,7 @@ export function CampaignsPageList({
   items,
   deletingId,
   onDeleteSavedSearch,
+  onDeleteCampaign,
 }: CampaignsPageListProps) {
   return (
     <div className="space-y-3">
@@ -75,7 +77,12 @@ export function CampaignsPageList({
             onDelete={() => onDeleteSavedSearch(item.savedSearch.id)}
           />
         ) : (
-          <CampaignCard key={`campaign-${item.campaign.id}`} campaign={item.campaign} />
+          <CampaignCard
+            key={`campaign-${item.campaign.id}`}
+            campaign={item.campaign}
+            deleting={deletingId === item.campaign.id}
+            onDelete={() => onDeleteCampaign(item.campaign.id)}
+          />
         ),
       )}
     </div>
@@ -139,25 +146,54 @@ function SavedSearchCard({
   );
 }
 
-function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
+function CampaignCard({
+  campaign,
+  deleting,
+  onDelete,
+}: {
+  campaign: CampaignSummary;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
   return (
-    <Link href={`/campaigns/${campaign.id}`}>
-      <Card hover className="transition-colors hover:border-brand-200">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Mail className="h-4 w-4 shrink-0 text-slate-500" />
-              <p className="font-medium text-slate-900">{campaign.name}</p>
-              <Badge variant="default">{channelLabel(campaign.channel)}</Badge>
-            </div>
-            <p className="mt-1 truncate text-sm text-slate-600">
-              {campaign.channel === "EMAIL" ? campaign.subject : channelLabel(campaign.channel)}
-            </p>
+    <Card hover className="transition-colors hover:border-brand-200">
+      <div className="flex items-start justify-between gap-4">
+        <Link href={`/campaigns/${campaign.id}`} className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Mail className="h-4 w-4 shrink-0 text-slate-500" />
+            <p className="font-medium text-slate-900">{campaign.name}</p>
+            <Badge variant="default">{channelLabel(campaign.channel)}</Badge>
+            <Badge variant={campaignStatusVariant(campaign.status)}>{campaign.status}</Badge>
           </div>
-          <Badge variant={campaignStatusVariant(campaign.status)}>{campaign.status}</Badge>
-        </div>
-      </Card>
-    </Link>
+          <p className="mt-1 truncate text-sm text-slate-600">
+            {campaign.channel === "EMAIL" ? campaign.subject : channelLabel(campaign.channel)}
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Created{" "}
+            {new Date(campaign.createdAt).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+          </p>
+        </Link>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          isLoading={deleting}
+          leftIcon={<Trash2 className="h-4 w-4" />}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onDelete();
+          }}
+          aria-label={`Delete campaign ${campaign.name}`}
+        >
+          Delete
+        </Button>
+      </div>
+    </Card>
   );
 }
 

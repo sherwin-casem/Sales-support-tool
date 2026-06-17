@@ -16,7 +16,7 @@ export function SearchForm() {
   const queryFieldId = useId();
   const limitFieldId = useId();
   const [query, setQuery] = useState("");
-  const [companyLimit, setCompanyLimit] = useState<string>("");
+  const [companyLimit, setCompanyLimit] = useState<string>("10");
   const { submit, isSubmitting, fieldErrors, formError } = useCreateSearch();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -73,12 +73,12 @@ export function SearchForm() {
           error={fieldErrors.companyLimit}
           disabled={isSubmitting}
         >
-          <option value="">No limit</option>
           {COMPANY_LIMIT_OPTIONS.map((limit) => (
             <option key={limit} value={limit}>
               {limit} leads
             </option>
           ))}
+          <option value="">No limit</option>
         </Select>
       </div>
 

@@ -76,6 +76,20 @@ export default function CampaignsPage() {
     [],
   );
 
+  const handleDeleteCampaign = useCallback(async (campaignId: string) => {
+    setDeletingId(campaignId);
+    setError(null);
+
+    try {
+      await apiFetch(`/api/v1/campaigns/${campaignId}`, { method: "DELETE" });
+      setCampaigns((current) => current.filter((item) => item.id !== campaignId));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete campaign.");
+    } finally {
+      setDeletingId(null);
+    }
+  }, []);
+
   return (
     <main className="px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl space-y-8">
@@ -113,6 +127,7 @@ export default function CampaignsPage() {
             items={items}
             deletingId={deletingId}
             onDeleteSavedSearch={(savedSearchId) => void handleDeleteSavedSearch(savedSearchId)}
+            onDeleteCampaign={(campaignId) => void handleDeleteCampaign(campaignId)}
           />
         )}
       </div>

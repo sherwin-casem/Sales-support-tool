@@ -184,6 +184,14 @@ export class CampaignRepository {
     return campaigns.map(mapCampaign);
   }
 
+  async deleteById(id: string): Promise<boolean> {
+    const result = await getPrismaClient().campaign.deleteMany({
+      where: { id },
+    });
+
+    return result.count > 0;
+  }
+
   async countRecipientsByStatus(campaignId: string): Promise<Record<RecipientStatus, number>> {
     const groups = await getPrismaClient().campaignRecipient.groupBy({
       by: ["status"],

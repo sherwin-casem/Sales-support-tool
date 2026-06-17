@@ -7,6 +7,7 @@ export const PERMISSIONS = {
   "campaign:create": ["ADMIN", "MANAGER", "SALES_REP"],
   "campaign:read": ["ADMIN", "MANAGER", "SALES_REP"],
   "campaign:send": ["ADMIN", "MANAGER", "SALES_REP"],
+  "campaign:delete": ["ADMIN", "MANAGER", "SALES_REP"],
   "outreach:generate": ["ADMIN", "MANAGER", "SALES_REP"],
   "analytics:read": ["ADMIN", "MANAGER"],
   "user:manage": ["ADMIN"],
