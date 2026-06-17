@@ -45,6 +45,7 @@ function createDependencies(
       }),
       countRecipientsByStatus: vi.fn(),
       listDueScheduledCampaigns: vi.fn().mockResolvedValue([]),
+      deleteById: vi.fn().mockResolvedValue(true),
     } as unknown as CampaignApiServiceDependencies["campaignRepository"],
     companyRepository: {
       findBySearchResultForUser: vi.fn(),
@@ -133,6 +134,52 @@ describe("CampaignApiService", () => {
     );
     expect(scheduleBackgroundTask).toHaveBeenCalledTimes(1);
     expect(sendCampaign).toHaveBeenCalledWith(campaignId, user.id);
+  });
+
+  it("deletes a campaign owned by the user", async () => {
+    const deleteById = vi.fn().mockResolvedValue(true);
+    const deps = createDependencies({
+      campaignRepository: {
+        ...createDependencies().campaignRepository,
+        deleteById,
+      } as CampaignApiServiceDependencies["campaignRepository"],
+    });
+    const service = new CampaignApiService(deps);
+
+    const result = await service.deleteCampaign(user, campaignId);
+
+    expect(result.deletedCount).toBe(1);
+    expect(deleteById).toHaveBeenCalledWith(campaignId);
+  });
+
+  it("rejects deleting a running campaign", async () => {
+    const deps = createDependencies({
+      campaignRepository: {
+        ...createDependencies().campaignRepository,
+        findById: vi.fn().mockResolvedValue({
+          id: campaignId,
+          userId: user.id,
+          organizationId: user.organizationId,
+          name: "Running campaign",
+          channel: "EMAIL",
+          status: "RUNNING",
+          subject: "Hello",
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          scheduledAt: null,
+          startedAt: new Date(),
+          completedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          recipients: [],
+        }),
+      } as CampaignApiServiceDependencies["campaignRepository"],
+    });
+    const service = new CampaignApiService(deps);
+
+    await expect(service.deleteCampaign(user, campaignId)).rejects.toEqual(
+      ApiError.invalidInput("Cannot delete a campaign while it is running. Pause it first."),
+    );
   });
 
   it("processes due scheduled campaigns", async () => {

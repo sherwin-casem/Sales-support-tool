@@ -23,3 +23,20 @@ export async function GET(
 ) {
   return handleGet(request, context);
 }
+
+const handleDelete = withApiHandler(
+  async (_request, context) => {
+    const user = requireUser(context);
+    const params = requireParams(context.params, CampaignIdParamsSchema);
+    const result = await getCampaignApiService().deleteCampaign(user, params.id);
+    return jsonResponse(result);
+  },
+  { route: "/api/v1/campaigns/:id", method: "DELETE", permission: "campaign:delete" },
+);
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  return handleDelete(request, context);
+}

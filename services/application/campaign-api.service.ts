@@ -213,6 +213,36 @@ export class CampaignApiService {
     return { id: campaignId, status: "PAUSED" };
   }
 
+  async deleteCampaign(user: AuthenticatedUser, campaignId: string) {
+    const campaign = await this.deps.campaignRepository.findById(campaignId);
+
+    if (!campaign) {
+      throw ApiError.notFound(`Campaign not found: ${campaignId}`);
+    }
+
+    if (user.role === "SALES_REP" && campaign.userId !== user.id) {
+      throw ApiError.forbidden("Cannot delete another rep's campaign");
+    }
+
+    if (user.role !== "SALES_REP" && campaign.organizationId !== user.organizationId) {
+      throw ApiError.forbidden("Campaign not in your organization");
+    }
+
+    if (campaign.status === "RUNNING") {
+      throw ApiError.invalidInput(
+        "Cannot delete a campaign while it is running. Pause it first.",
+      );
+    }
+
+    const deleted = await this.deps.campaignRepository.deleteById(campaignId);
+
+    if (!deleted) {
+      throw ApiError.notFound(`Campaign not found: ${campaignId}`);
+    }
+
+    return { deletedCount: 1 };
+  }
+
   async processDueScheduledCampaigns(): Promise<{ processedCampaignIds: string[] }> {
     const dueCampaigns = await this.deps.campaignRepository.listDueScheduledCampaigns();
     const outreachConfig = (this.deps.getOutreachConfig ?? getOutreachConfig)();
