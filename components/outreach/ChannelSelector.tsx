@@ -1,7 +1,7 @@
 "use client";
 
-import type { OutreachChannelValue } from "@/lib/outreach/channel-labels";
-import { OUTREACH_CHANNELS } from "@/lib/outreach/channel-labels";
+import type { OutreachChannelValue } from "@/types/outreach/channel-labels";
+import { OUTREACH_CHANNELS } from "@/types/outreach/channel-labels";
 
 interface ChannelSelectorProps {
   value: OutreachChannelValue;

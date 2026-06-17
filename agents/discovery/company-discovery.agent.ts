@@ -11,7 +11,7 @@ import {
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import { companyDeduplicatorService } from "@/services/domain/company/company-deduplicator.service.js";
 import { DiscoveryError } from "@/types/agents/discovery-error.types.js";
-import { isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
+import { isUnlimitedCompanyLimit } from "@/services/domain/search/company-limit.js";
 import {
   COMPANY_DISCOVERY_PROMPT_VERSION,
   type CompanyDiscoveryInput,

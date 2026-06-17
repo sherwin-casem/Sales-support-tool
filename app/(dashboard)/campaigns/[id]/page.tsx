@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api/browser-client";
-import { channelLabel } from "@/lib/outreach/channel-labels";
+import { channelLabel } from "@/types/outreach/channel-labels";
 import { CampaignStats } from "@/components/analytics/CampaignStats";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api/browser-client";
-import { channelLabel, engagementLabel } from "@/lib/outreach/channel-labels";
+import { channelLabel, engagementLabel } from "@/types/outreach/channel-labels";
 import { CampaignStats } from "@/components/analytics/CampaignStats";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";

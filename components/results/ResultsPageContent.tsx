@@ -13,8 +13,8 @@ import { SearchJobControls } from "@/components/results/SearchJobControls";
 import { SearchJobHeader } from "@/components/results/SearchJobHeader";
 import { useSavedSearch } from "@/components/results/use-saved-search";
 import { useSearchJob } from "@/components/results/use-search-job";
-import { processSearchResults } from "@/lib/results/process-search-results";
-import { isSearchJobCancelled } from "@/lib/results/search-job-status";
+import { processSearchResults } from "@/lib/display/process-search-results";
+import { isSearchJobCancelled } from "@/services/domain/search/search-job-status";
 import {
   DEFAULT_RESULTS_VIEW,
   ResultsViewSchema,

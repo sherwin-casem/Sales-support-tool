@@ -6,7 +6,7 @@ import {
   mapGetSearchResponse,
 } from "@/lib/api/api-mappers.js";
 import { getSecurityConfig } from "@/lib/config/security.config.js";
-import { isSearchJobActive } from "@/lib/results/search-job-status.js";
+import { isSearchJobActive } from "@/services/domain/search/search-job-status.js";
 import type { CreateSearchRequestInput, GetSearchQueryInput } from "@/lib/validations/api/search.schema.js";
 import type { StaleSearchJobCleanupService } from "@/services/application/stale-search-job-cleanup.service.js";
 import type { SearchOrchestrator } from "@/services/application/search-orchestrator.service.js";

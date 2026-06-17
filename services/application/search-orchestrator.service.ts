@@ -1,7 +1,7 @@
 import { SearchJobStatus, SearchResultStage } from "@prisma/client";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
-import { hasParsedCriteria } from "@/lib/search/parsed-criteria.js";
-import { getEnrichmentDeficit, isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
+import { hasParsedCriteria } from "@/services/domain/search/parsed-criteria.js";
+import { getEnrichmentDeficit, isUnlimitedCompanyLimit } from "@/services/domain/search/company-limit.js";
 import { computeExtractionCompleteness } from "@/lib/validations/company-extraction.schema.js";
 import { logger } from "@/lib/logging/logger.js";
 import { runWithConcurrency } from "@/lib/utils/concurrency.js";
@@ -30,7 +30,7 @@ import {
 import { hasOutreachContactGaps } from "@/services/domain/enrichment/outreach-gaps.service.js";
 import { mergeExtractedProfiles } from "@/services/domain/enrichment/profile-merge.service.js";
 import type { ContactlessLeadRemovalService } from "@/services/application/contactless-lead-removal.service.js";
-import { hasAnyLeadContactDetails } from "@/lib/results/lead-contact-eligibility.js";
+import { hasAnyLeadContactDetails } from "@/services/domain/enrichment/lead-contact-eligibility.js";
 import type { SearchResultRecord } from "@/types/repositories/search.repository.types.js";
 import type { CompanyDiscoveryPort } from "@/services/infrastructure/discovery/company-discovery.service.js";
 import type { CompanyExtractionPort } from "@/services/infrastructure/ai/company-extraction.service.js";

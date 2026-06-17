@@ -3,7 +3,7 @@ import {
   buildOrganizationSlugCandidates,
   resolveUniqueOrganizationSlug,
   slugifyOrganizationName,
-} from "@/lib/domain/organization-slug.js";
+} from "@/services/domain/organization/organization-slug.js";
 
 describe("organization-slug", () => {
   it("slugifies organization names", () => {

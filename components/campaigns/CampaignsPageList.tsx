@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { Bookmark, Mail, Trash2 } from "lucide-react";
-import { outreachStatusLabel } from "@/lib/saved-search/outreach-status";
-import { channelLabel } from "@/lib/outreach/channel-labels";
+import { outreachStatusLabel } from "@/services/domain/saved-search/outreach-status";
+import { channelLabel } from "@/types/outreach/channel-labels";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";

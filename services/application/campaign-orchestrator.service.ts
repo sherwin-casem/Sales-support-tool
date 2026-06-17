@@ -1,3 +1,4 @@
+import { ApiError } from "@/lib/api/api-error.js";
 import { logger } from "@/lib/logging/logger.js";
 import {
   getChannelRatePerMinute,
@@ -28,7 +29,7 @@ export class CampaignOrchestratorService {
     const campaign = await campaignRepository.findById(campaignId);
 
     if (!campaign || campaign.userId !== userId) {
-      throw new Error("Campaign not found");
+      throw ApiError.notFound("Campaign not found");
     }
 
     if (campaign.status === "PAUSED") {
@@ -156,7 +157,7 @@ export class CampaignOrchestratorService {
           tags,
         });
       default:
-        throw new Error(`Unsupported channel: ${campaign.channel}`);
+        throw ApiError.invalidInput(`Unsupported channel: ${campaign.channel}`);
     }
   }
 }

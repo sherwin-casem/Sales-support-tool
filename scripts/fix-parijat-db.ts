@@ -1,5 +1,10 @@
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import {
+  DEFAULT_PARIJAT_SERVICES_CATALOG,
+  PARIJAT_ORG_NAME,
+  PARIJAT_ORG_SLUG,
+} from "../lib/config/parijat.config.js";
 
 const prisma = new PrismaClient();
 
@@ -10,15 +15,16 @@ async function main() {
   const passwordHash = await hash("parijat-admin", 12);
 
   await prisma.organization.upsert({
-    where: { slug: "parijat" },
+    where: { slug: PARIJAT_ORG_SLUG },
     create: {
       id: PARIJAT_ORG_ID,
-      name: "Parijat",
-      slug: "parijat",
-      servicesCatalog: [],
+      name: PARIJAT_ORG_NAME,
+      slug: PARIJAT_ORG_SLUG,
+      servicesCatalog: DEFAULT_PARIJAT_SERVICES_CATALOG,
     },
     update: {
-      name: "Parijat",
+      name: PARIJAT_ORG_NAME,
+      servicesCatalog: DEFAULT_PARIJAT_SERVICES_CATALOG,
     },
   });
 

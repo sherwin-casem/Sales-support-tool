@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logging/logger.js";
-import { hasAnyLeadContactDetails } from "@/lib/results/lead-contact-eligibility.js";
+import { hasAnyLeadContactDetails } from "@/services/domain/enrichment/lead-contact-eligibility.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
 import { getCompanyRepository } from "@/repositories/prisma/company.repository.js";
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";

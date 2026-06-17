@@ -1,7 +1,7 @@
 import { hash } from "bcryptjs";
 import { ApiError } from "@/lib/api/api-error.js";
 import { getSecurityConfig } from "@/lib/config/security.config.js";
-import { resolveUniqueOrganizationSlug } from "@/lib/domain/organization-slug.js";
+import { resolveUniqueOrganizationSlug } from "@/services/domain/organization/organization-slug.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
 import type { RegisterRequestInput } from "@/lib/validations/api/auth.schema.js";
 import { getUserRepository } from "@/repositories/prisma/user.repository.js";

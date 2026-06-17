@@ -5,7 +5,7 @@ import {
   paginateResults,
   processSearchResults,
   sortSearchResults,
-} from "@/lib/results/process-search-results";
+} from "@/lib/display/process-search-results";
 
 function createResult(
   searchResultId: string,

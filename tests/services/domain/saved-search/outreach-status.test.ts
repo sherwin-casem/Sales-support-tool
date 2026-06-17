@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeSavedSearchOutreachStatus } from "@/lib/saved-search/outreach-status.js";
+import { computeSavedSearchOutreachStatus } from "@/services/domain/saved-search/outreach-status.js";
 
 describe("computeSavedSearchOutreachStatus", () => {
   it("returns NOT_STARTED when there are no recipients", () => {

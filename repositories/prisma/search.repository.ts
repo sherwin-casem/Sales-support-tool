@@ -6,7 +6,7 @@ import {
 } from "@prisma/client";
 import { resolveDbClient, type DbClient } from "@/lib/db/db-client.types.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
-import { ACTIVE_SEARCH_JOB_STATUSES } from "@/lib/results/search-job-status.js";
+import { ACTIVE_SEARCH_JOB_STATUSES } from "@/services/domain/search/search-job-status.js";
 import type { CompanyRepository } from "@/repositories/interfaces/company.repository.interface.js";
 import type { SearchRepository } from "@/repositories/interfaces/search.repository.interface.js";
 import { PrismaCompanyRepository } from "@/repositories/prisma/company.repository.js";

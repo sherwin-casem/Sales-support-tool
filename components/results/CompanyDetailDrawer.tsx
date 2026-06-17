@@ -14,17 +14,17 @@ import {
   formatLocation,
   getCompanyDisplayName,
   hasDisplayValue,
-} from "@/lib/results/display-fields";
+} from "@/lib/display/display-fields";
 import {
   hasDecisionMakerContactDetails,
   resolveDecisionMakerContact,
-} from "@/lib/results/decision-maker-contact";
-import { hasCompanyContactDetails } from "@/lib/results/lead-contact-eligibility";
+} from "@/lib/display/decision-maker-contact";
+import { hasCompanyContactDetails } from "@/services/domain/enrichment/lead-contact-eligibility";
 import {
   normalizePhoneHref,
   resolveDisplayEmail,
   resolveDisplayPhone,
-} from "@/lib/results/profile-contacts";
+} from "@/lib/display/profile-contacts";
 import { resolveRecipientForChannel } from "@/services/domain/outreach/recipient-resolver.service";
 
 interface CompanyDetailDrawerProps {

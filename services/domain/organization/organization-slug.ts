@@ -1,3 +1,5 @@
+import { DomainError } from "@/types/domain/domain-error.types.js";
+
 const SLUG_MAX_LENGTH = 100;
 
 export function slugifyOrganizationName(name: string): string {
@@ -37,5 +39,5 @@ export async function resolveUniqueOrganizationSlug(
     }
   }
 
-  throw new Error("Unable to generate a unique organization slug");
+  throw new DomainError("CONFLICT", "Unable to generate a unique organization slug");
 }

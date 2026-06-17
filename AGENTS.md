@@ -55,9 +55,6 @@ AI-powered agents that handle specific business logic. All agents implement the 
   
 - **Outreach Agent** (`outreach/`)
   - `outreach-message.agent.ts`: Generates AI-personalized outreach messages
-  
-- **Scoring Agent** (`scoring/`)
-  - Scores leads based on intent and relevance
 
 #### Shared Utilities:
 - `base/agent.interface.ts`: Core interface all agents implement
@@ -96,9 +93,14 @@ Business logic layer independent of frameworks.
 
 #### Modules:
 - **company/**: Company deduplication by domain
-- **enrichment/**: Profile merging, contact extraction, outreach gap detection
+- **enrichment/**: Profile merging, contact extraction, outreach gap detection, lead contact eligibility
 - **content/**: Prompt sanitization, text processing
 - **crawler/**: Website crawling utilities
+- **intent/**: Intent score computation
+- **organization/**: Organization slug generation
+- **outreach/**: Recipient resolution
+- **saved-search/**: Saved search outreach status
+- **search/**: Company limits, parsed criteria, search job status
 
 #### Key Responsibilities:
 - Profile merging across multiple crawl attempts
@@ -125,8 +127,11 @@ Low-level integrations with external systems.
   
 - **content/**: Content processing
   - `text-cleaning.service.ts`: HTML → LLM-ready text
-  
-- **database/**: Prisma queries (domain-specific)
+
+- **outreach/**: Multi-channel delivery (email, WhatsApp, LinkedIn)
+  - `adapters/resend.adapter.ts`, `adapters/meta-cloud.adapter.ts`, `adapters/unipile.adapter.ts`
+  - `outreach-delivery.port.ts`: Delivery adapter interface
+  - `delivery-adapter.registry.ts`: Channel → adapter routing
 
 ---
 
@@ -187,9 +192,12 @@ Data access layer.
 
 **Webhooks:**
 - `POST /api/v1/webhooks/resend`: Handle email delivery webhooks
+- `POST /api/v1/webhooks/whatsapp`: Handle WhatsApp delivery webhooks
+- `POST /api/v1/webhooks/linkedin`: Handle LinkedIn delivery webhooks
 
 **Cron:**
 - `GET /api/cron/refresh-leads`: Trigger scheduled lead refresh
+- `GET /api/cron/send-campaigns`: Send scheduled campaigns
 
 ---
 
@@ -199,8 +207,7 @@ Data access layer.
 - **layout/**: Header, sidebar, navigation
 - **search/**: Search form, filters
 - **results/**: Search results display, company cards
-- **companies/**: Company list, detail views
-- **leads/**: Lead scoring, qualification UI
+- **company/**: Company detail views
 - **outreach/**: Message generation, preview
 - **campaigns/**: Campaign builder, scheduling
 - **analytics/**: Dashboard charts, metrics
@@ -259,20 +266,26 @@ Data access layer.
 - `discovery-blocklist.ts`: Domains to skip in discovery
 
 #### API:
-- `handler.ts`: Generic API handler wrapper
-- `http-response.ts`: JSON response builder
+- `handler.ts`: Generic API handler wrapper (`withApiHandler`)
+- `cron-handler.ts`: Cron job auth + error wrapper (`withCronHandler`)
+- `webhook-handler.ts`: Webhook logging + error wrapper (`withWebhookHandler`)
+- `http-response.ts`: JSON response builder + `toApiError` error mapping
 - `parse-request.ts`: Request body parsing + validation
-- `auth.ts`: Extract authenticated user
+- `browser-client.ts`: Browser-side API client
 - `rate-limit.ts`: Rate limiting utilities
 - `sanitize-profile.ts`: Remove sensitive data
 
-#### Auth:
-- `auth.ts`: Prisma adapter, session config
+#### Auth (`lib/auth/`):
+- `auth.ts`: NextAuth Prisma adapter, session config
 - `permissions.ts`: Role-based access control
-- `client-auth.ts`: Browser auth utilities
+- `edge-auth.ts`: Edge-compatible auth helpers
 
-#### Search:
-- `company-limit.ts`: Company result limits logic
+#### Display (`lib/display/`):
+- UI display helpers for search results (formatting, contact resolution, pagination)
+
+#### Security (`lib/security/`):
+- Webhook signature verification (Resend, WhatsApp, Unipile/LinkedIn)
+- Prompt and URL safety utilities
 
 #### Logging:
 - `logger.ts`: Pino logger singleton
@@ -293,12 +306,12 @@ Data access layer.
 - `agents/`: Agent input/output types
 - `api/`: API request/response types
 - `auth/`: Auth types
+- `domain/`: Domain error types (`DomainError`)
+- `outreach/`: Outreach channel labels and constants
 - `content/`: Text content types
 - `crawler/`: Crawler configuration
-- `domain/`: Business domain types
 - `orchestration/`: Orchestrator types
-- `repositories/`: Repository types
-- `results/`: Result/error types
+- `repositories/`: Repository types + `RepositoryError`
 - `shared/`: Common types
 
 ---
@@ -416,9 +429,14 @@ Services instantiated via factories (dependency injection).
 Data access abstracted via interfaces.
 
 ### 6. **Error Handling**
-- Custom error types (AgentError, ValidationError, etc.)
-- Errors propagate as Result.error, never thrown
-- Comprehensive error messages for debugging
+Layered error strategy:
+- **Agents & infrastructure**: `Result<T, E>` — errors never thrown
+- **Repositories**: throw `RepositoryError` with typed codes
+- **Domain services**: throw `DomainError` for business rule violations
+- **Application services**: throw `ApiError` for HTTP-boundary concerns
+- **API/cron/webhook routes**: `withApiHandler`, `withCronHandler`, `withWebhookHandler` catch all errors and map via `toApiError()` → JSON response
+
+`toApiError()` translates `RepositoryError` and `DomainError` to appropriate HTTP status codes.
 
 ---
 

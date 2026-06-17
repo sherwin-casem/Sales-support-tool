@@ -3,7 +3,7 @@ import { createExtractedCompanyProfile } from "../../helpers/extracted-company.f
 import {
   hasDecisionMakerContactDetails,
   resolveDecisionMakerContact,
-} from "@/lib/results/decision-maker-contact.js";
+} from "@/lib/display/decision-maker-contact.js";
 
 describe("decision-maker-contact", () => {
   it("resolves personal decision maker contact fields only", () => {

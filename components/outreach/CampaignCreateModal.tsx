@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { apiFetch } from "@/lib/api/browser-client";
 import { resolveOutreachBodyHtml } from "@/lib/validations/outreach-message.schema";
-import type { OutreachChannelValue } from "@/lib/outreach/channel-labels";
+import type { OutreachChannelValue } from "@/types/outreach/channel-labels";
 import { ChannelSelector } from "@/components/outreach/ChannelSelector";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";

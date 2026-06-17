@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createExtractedCompanyProfile } from "../../helpers/extracted-company.fixture.js";
+import { createExtractedCompanyProfile } from "../../../helpers/extracted-company.fixture.js";
 import {
   hasAnyLeadContactDetails,
   hasCompanyContactDetails,
-} from "@/lib/results/lead-contact-eligibility.js";
+} from "@/services/domain/enrichment/lead-contact-eligibility.js";
 
 describe("lead-contact-eligibility", () => {
   it("detects company email as company contact", () => {

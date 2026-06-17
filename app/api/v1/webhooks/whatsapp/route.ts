@@ -1,6 +1,7 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { jsonResponse } from "@/lib/api/http-response";
+import { withWebhookHandler } from "@/lib/api/webhook-handler.js";
 import { getOutreachConfig } from "@/lib/config/outreach.config.js";
+import { verifyWhatsAppWebhookSignature } from "@/lib/security/whatsapp-webhook.js";
 import { getDeliveryTrackingService } from "@/services/application/delivery-tracking.service.js";
 import type { RecipientStatus } from "@prisma/client";
 
@@ -34,26 +35,6 @@ const STATUS_MAP: Record<
   failed: { status: "FAILED" },
 };
 
-function verifyWhatsAppSignature(rawBody: string, signatureHeader: string | null, appSecret: string) {
-  if (!appSecret.trim()) {
-    return;
-  }
-
-  if (!signatureHeader?.startsWith("sha256=")) {
-    throw new Error("Invalid WhatsApp webhook signature");
-  }
-
-  const expected = createHmac("sha256", appSecret).update(rawBody).digest("hex");
-  const provided = signatureHeader.slice("sha256=".length);
-
-  if (
-    expected.length !== provided.length ||
-    !timingSafeEqual(Buffer.from(expected), Buffer.from(provided))
-  ) {
-    throw new Error("Invalid WhatsApp webhook signature");
-  }
-}
-
 export async function GET(request: Request) {
   const config = getOutreachConfig();
   const url = new URL(request.url);
@@ -68,11 +49,15 @@ export async function GET(request: Request) {
   return new Response("Forbidden", { status: 403 });
 }
 
-export async function POST(request: Request) {
+async function handleWhatsAppWebhook(request: Request): Promise<Response> {
   const config = getOutreachConfig();
   const rawBody = await request.text();
 
-  verifyWhatsAppSignature(rawBody, request.headers.get("x-hub-signature-256"), config.whatsappAppSecret);
+  verifyWhatsAppWebhookSignature(
+    rawBody,
+    request.headers.get("x-hub-signature-256"),
+    config.whatsappAppSecret,
+  );
 
   const payload = JSON.parse(rawBody) as WhatsAppWebhookPayload;
   const tracking = getDeliveryTrackingService();
@@ -106,3 +91,8 @@ export async function POST(request: Request) {
 
   return jsonResponse({ received: true });
 }
+
+export const POST = withWebhookHandler(handleWhatsAppWebhook, {
+  route: "/api/v1/webhooks/whatsapp",
+  method: "POST",
+});
