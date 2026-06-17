@@ -79,6 +79,23 @@ function createDependencies(
       deleteCompanyAndSearchResults: vi.fn().mockResolvedValue({ deletedSearchResults: 1 }),
     };
 
+  const baseJob = {
+    id: searchJobId,
+    userId,
+    query: "Find logistics companies in Finland with 50-200 employees",
+    criteria: {} as Record<string, unknown>,
+    status: "PENDING" as const,
+    companyLimit: null as number | null,
+    errorMessage: null as string | null,
+    startedAt: null as Date | null,
+    completedAt: null as Date | null,
+    createdAt: new Date("2026-06-07T12:00:00.000Z"),
+    updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+  };
+
+  const stageCounts: Partial<Record<string, number>> = {};
+  let persistedResults: typeof searchResults = [];
+
   return {
     queryParser: {
       parse: vi.fn().mockResolvedValue(ok(criteria)),
@@ -175,60 +192,50 @@ function createDependencies(
       ),
     },
     searchRepository: {
-      createJob: vi.fn().mockResolvedValue({
-        id: searchJobId,
-        userId,
-        query: "Find logistics companies in Finland with 50-200 employees",
-        criteria: {},
-        status: "PENDING",
-        companyLimit: null,
-        errorMessage: null,
-        startedAt: null,
-        completedAt: null,
-        createdAt: new Date("2026-06-07T12:00:00.000Z"),
-        updatedAt: new Date("2026-06-07T12:00:00.000Z"),
+      createJob: vi.fn().mockResolvedValue(baseJob),
+      findJobById: vi.fn().mockImplementation(() => Promise.resolve({ ...baseJob })),
+      updateJobStatus: vi.fn().mockImplementation((_id, status) => {
+        baseJob.status = status;
+        return Promise.resolve({ ...baseJob, status });
       }),
-      findJobById: vi.fn(),
-      updateJobStatus: vi.fn().mockImplementation((_id, status) =>
-        Promise.resolve({
-          id: searchJobId,
-          userId,
-          query: "Find logistics companies in Finland with 50-200 employees",
-          criteria,
-          status,
-          companyLimit: null,
-          errorMessage: null,
-          startedAt: new Date("2026-06-07T12:00:00.000Z"),
-          completedAt: status === "COMPLETED" ? new Date("2026-06-07T12:05:00.000Z") : null,
-          createdAt: new Date("2026-06-07T12:00:00.000Z"),
-          updatedAt: new Date("2026-06-07T12:05:00.000Z"),
-        }),
-      ),
       updateJobCriteria: vi.fn().mockResolvedValue({}),
-      addDiscoveredCompanies: vi.fn().mockResolvedValue({
-        companies: [company],
-        searchResults,
-        skippedDuplicates: 0,
+      addDiscoveredCompanies: vi.fn().mockImplementation(() => {
+        persistedResults = searchResults;
+        return Promise.resolve({
+          companies: [company],
+          searchResults,
+          skippedDuplicates: 0,
+        });
       }),
       findResultsByJobId: vi.fn().mockImplementation((_jobId, options) => {
+        let results = persistedResults;
+
         if (options?.stage === "CRAWLED") {
-          return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "CRAWLED" as const })));
+          return Promise.resolve(
+            results.map((result) => ({ ...result, stage: "CRAWLED" as const })),
+          );
         }
 
         if (options?.stage === "EXTRACTED") {
-          return Promise.resolve(searchResults.map((result) => ({ ...result, stage: "EXTRACTED" as const })));
+          return Promise.resolve(
+            results.map((result) => ({ ...result, stage: "EXTRACTED" as const })),
+          );
         }
 
-        return Promise.resolve(searchResults);
+        return Promise.resolve(results);
       }),
-      updateResultStage: vi.fn().mockImplementation((input) =>
-        Promise.resolve({
+      updateResultStage: vi.fn().mockImplementation((input) => {
+        if (input.stage) {
+          stageCounts[input.stage] = (stageCounts[input.stage] ?? 0) + 1;
+        }
+
+        return Promise.resolve({
           ...searchResults[0]!,
           stage: input.stage,
           stageError: input.stageError ?? null,
-        }),
-      ),
-      countResultsByStage: vi.fn().mockResolvedValue({}),
+        });
+      }),
+      countResultsByStage: vi.fn().mockImplementation(async () => ({ ...stageCounts })),
       deleteResult: vi.fn().mockResolvedValue(undefined),
       findResultById: vi.fn(),
     },

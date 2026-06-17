@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError } from "@/lib/api/api-client-error";
 import { fetchSearchJob, stopSearchJob } from "@/lib/api/browser-client";
-import { isSearchJobActive } from "@/lib/results/search-job-status";
+import { isSearchJobActive } from "@/services/domain/search/search-job-status";
 import type { GetSearchResponse } from "@/types/api/search.api.types";
 
 const POLL_INTERVAL_MS = 4000;

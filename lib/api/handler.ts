@@ -2,7 +2,7 @@ import { apiLogger } from "@/lib/logging/logger.js";
 import { ApiError } from "@/lib/api/api-error.js";
 import { getClientIp, getRateLimiter } from "@/lib/api/rate-limit.js";
 import { errorResponse, toApiError } from "@/lib/api/http-response.js";
-import { getAuthenticatedUserId, resolveAuthenticatedUserId } from "@/lib/api/auth.js";
+import { resolveAuthenticatedUserId } from "@/lib/api/auth.js";
 import { getSecurityConfig } from "@/lib/config/security.config.js";
 import {
   requirePermission,

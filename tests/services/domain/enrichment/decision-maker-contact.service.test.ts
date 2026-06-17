@@ -7,7 +7,6 @@ import {
   enrichProfileWithDecisionMakerContacts,
   extractDecisionMakerContactsFromHtml,
   hasDecisionMakerPersonalContactGaps,
-  sanitizeDecisionMakerContacts,
   sanitizeLeadContacts,
 } from "@/services/domain/enrichment/decision-maker-contact.service.js";
 
@@ -48,7 +47,7 @@ describe("decision-maker-contact.service", () => {
   });
 
   it("sanitizes generic and duplicate company contacts from personal fields", () => {
-    const sanitized = sanitizeDecisionMakerContacts(
+    const sanitized = sanitizeLeadContacts(
       createExtractedCompanyProfile({
         decisionMaker: "Jane Doe, CEO",
         decisionMakerEmail: "info@acme.fi",

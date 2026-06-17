@@ -9,7 +9,7 @@ import {
   formatWebsiteLabel,
   getCompanyDisplayName,
   isDisplayEmpty,
-} from "@/lib/results/display-fields";
+} from "@/lib/display/display-fields";
 import type { OpenResultDetailOptions } from "@/types/results/result-detail.types";
 import { cn } from "@/lib/utils/cn";
 

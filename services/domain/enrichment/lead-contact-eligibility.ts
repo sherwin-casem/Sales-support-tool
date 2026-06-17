@@ -1,13 +1,13 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
-import { hasDisplayValue } from "@/lib/results/display-fields.js";
+import { hasDisplayValue } from "@/lib/display/display-fields.js";
 import {
   hasDecisionMakerContactDetails,
   resolveDecisionMakerContact,
-} from "@/lib/results/decision-maker-contact.js";
+} from "@/lib/display/decision-maker-contact.js";
 import {
   resolveDisplayEmail,
   resolveDisplayPhone,
-} from "@/lib/results/profile-contacts.js";
+} from "@/lib/display/profile-contacts.js";
 
 export function hasCompanyContactDetails(profile: ExtractedCompany): boolean {
   const companyEmail = resolveDisplayEmail(profile.email ?? null);

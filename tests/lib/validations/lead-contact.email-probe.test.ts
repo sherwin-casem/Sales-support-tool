@@ -3,7 +3,7 @@ import {
   validateEmail,
   validatePersonalEmail,
 } from "@/lib/validations/lead-contact.validation.js";
-import { resolveDecisionMakerContact } from "@/lib/results/decision-maker-contact.js";
+import { resolveDecisionMakerContact } from "@/lib/display/decision-maker-contact.js";
 import { createExtractedCompanyProfile } from "../../helpers/extracted-company.fixture.js";
 
 describe("lead-contact.validation email", () => {

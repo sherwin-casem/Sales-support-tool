@@ -5,7 +5,7 @@ import {
   formatWebsiteLabel,
   getCompanyDisplayName,
   hasDisplayValue,
-} from "@/lib/results/display-fields";
+} from "@/lib/display/display-fields";
 
 describe("display-fields", () => {
   const profile = {

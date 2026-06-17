@@ -1,6 +1,7 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { jsonResponse } from "@/lib/api/http-response";
+import { withWebhookHandler } from "@/lib/api/webhook-handler.js";
 import { getOutreachConfig } from "@/lib/config/outreach.config.js";
+import { verifyUnipileWebhookSignature } from "@/lib/security/unipile-webhook.js";
 import { getDeliveryTrackingService } from "@/services/application/delivery-tracking.service.js";
 import type { RecipientStatus } from "@prisma/client";
 
@@ -25,30 +26,15 @@ const EVENT_STATUS_MAP: Record<
   "message.replied": { status: "REPLIED", field: "repliedAt" },
 };
 
-function verifyUnipileSignature(rawBody: string, signatureHeader: string | null, secret: string) {
-  if (!secret.trim()) {
-    return;
-  }
-
-  if (!signatureHeader) {
-    throw new Error("Missing Unipile webhook signature");
-  }
-
-  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
-
-  if (
-    expected.length !== signatureHeader.length ||
-    !timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader))
-  ) {
-    throw new Error("Invalid Unipile webhook signature");
-  }
-}
-
-export async function POST(request: Request) {
+async function handleLinkedInWebhook(request: Request): Promise<Response> {
   const config = getOutreachConfig();
   const rawBody = await request.text();
 
-  verifyUnipileSignature(rawBody, request.headers.get("x-unipile-signature"), config.unipileWebhookSecret);
+  verifyUnipileWebhookSignature(
+    rawBody,
+    request.headers.get("x-unipile-signature"),
+    config.unipileWebhookSecret,
+  );
 
   const payload = JSON.parse(rawBody) as UnipileWebhookPayload;
   const providerId = payload.data?.message_id ?? payload.data?.id;
@@ -74,3 +60,8 @@ export async function POST(request: Request) {
 
   return jsonResponse({ received: true });
 }
+
+export const POST = withWebhookHandler(handleLinkedInWebhook, {
+  route: "/api/v1/webhooks/linkedin",
+  method: "POST",
+});

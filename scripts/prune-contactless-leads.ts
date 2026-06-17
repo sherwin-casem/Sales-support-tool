@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { hasAnyLeadContactDetails } from "@/lib/results/lead-contact-eligibility.js";
+import { hasAnyLeadContactDetails } from "@/services/domain/enrichment/lead-contact-eligibility.js";
 import { mapCompanyProfile } from "@/repositories/prisma/mappers.js";
 import { findLatestProfilesByCompanyIds } from "@/repositories/prisma/repository.utils.js";
 import { getContactlessLeadRemovalService } from "@/services/application/contactless-lead-removal.service.js";

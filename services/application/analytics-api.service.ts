@@ -2,7 +2,7 @@ import { ApiError } from "@/lib/api/api-error.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
 import type { AuthenticatedUser } from "@/types/auth/session.types.js";
 import type { OutreachChannel, RecipientStatus } from "@prisma/client";
-import { channelLabel } from "@/lib/outreach/channel-labels.js";
+import { channelLabel } from "@/types/outreach/channel-labels.js";
 
 export class AnalyticsApiService {
   async getCampaignAnalytics(

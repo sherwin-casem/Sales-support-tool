@@ -1,4 +1,5 @@
 import { jsonResponse } from "@/lib/api/http-response";
+import { withWebhookHandler } from "@/lib/api/webhook-handler.js";
 import { getOutreachConfig } from "@/lib/config/outreach.config.js";
 import { verifyResendWebhookSignature } from "@/lib/security/resend-webhook.js";
 import { getDeliveryTrackingService } from "@/services/application/delivery-tracking.service.js";
@@ -24,7 +25,7 @@ const EVENT_STATUS_MAP: Record<
   "email.complained": { status: "UNSUBSCRIBED" },
 };
 
-export async function POST(request: Request) {
+async function handleResendWebhook(request: Request): Promise<Response> {
   const rawBody = await request.text();
   const config = getOutreachConfig();
 
@@ -66,3 +67,8 @@ export async function POST(request: Request) {
 
   return jsonResponse({ received: true });
 }
+
+export const POST = withWebhookHandler(handleResendWebhook, {
+  route: "/api/v1/webhooks/resend",
+  method: "POST",
+});

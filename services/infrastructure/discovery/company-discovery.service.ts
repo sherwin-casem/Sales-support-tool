@@ -3,7 +3,7 @@ import { getEnv } from "@/lib/config/env.js";
 import { getPipelineConfig } from "@/lib/config/pipeline.config.js";
 import { createOpenAIClient } from "@/lib/config/openai.client.js";
 import { aiLogger } from "@/lib/logging/logger.js";
-import { isUnlimitedCompanyLimit } from "@/lib/search/company-limit.js";
+import { isUnlimitedCompanyLimit } from "@/services/domain/search/company-limit.js";
 import { withRetry } from "@/lib/utils/retry.js";
 import { err, ok, type Result } from "@/lib/utils/result.js";
 import { domainNormalizerService } from "@/services/domain/company/domain-normalizer.service.js";

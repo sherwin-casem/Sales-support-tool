@@ -208,11 +208,6 @@ export function applyDecisionMakerContactHints(
   };
 }
 
-/** @deprecated Use sanitizeLeadContacts */
-export function sanitizeDecisionMakerContacts(profile: ExtractedCompany): ExtractedCompany {
-  return sanitizeLeadContacts(profile);
-}
-
 export function enrichProfileWithDecisionMakerContacts(
   profile: ExtractedCompany,
   htmlPages: string[],

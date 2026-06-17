@@ -4,7 +4,7 @@ import {
   ACTIVE_SEARCH_JOB_STATUSES,
   isSearchJobActive,
   isSearchJobCancelled,
-} from "@/lib/results/search-job-status.js";
+} from "@/services/domain/search/search-job-status.js";
 
 describe("search-job-status", () => {
   it("treats enriching jobs as active", () => {

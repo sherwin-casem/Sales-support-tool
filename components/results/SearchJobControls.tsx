@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { formatSearchJobStatus } from "@/lib/results/search-job-status";
+import { formatSearchJobStatus } from "@/services/domain/search/search-job-status";
 import type { GetSearchResponse } from "@/types/api/search.api.types";
 
 interface SearchJobControlsProps {

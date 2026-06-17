@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { MessageCircle, MousePointerClick, Reply, Send, Users, Eye } from "lucide-react";
-import { engagementLabel } from "@/lib/outreach/channel-labels";
+import { engagementLabel } from "@/types/outreach/channel-labels";
 
 interface CampaignStatsProps {
   statusCounts: Record<string, number>;

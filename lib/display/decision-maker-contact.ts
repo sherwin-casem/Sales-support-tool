@@ -1,5 +1,5 @@
 import type { ExtractedCompany } from "@/types/agents/company-extraction.types.js";
-import { displayValue, isDisplayEmpty } from "@/lib/results/display-fields.js";
+import { displayValue, isDisplayEmpty } from "@/lib/display/display-fields.js";
 import {
   validatePersonalEmail,
   validatePhone,

@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { resolveDbClient, type DbClient } from "@/lib/db/db-client.types.js";
 import { getPrismaClient } from "@/lib/db/prisma.client.js";
-import { computeSavedSearchOutreachStatus } from "@/lib/saved-search/outreach-status.js";
+import { computeSavedSearchOutreachStatus } from "@/services/domain/saved-search/outreach-status.js";
 import type { SavedSearchRepository } from "@/repositories/interfaces/saved-search.repository.interface.js";
 import type {
   CreateSavedSearchInput,

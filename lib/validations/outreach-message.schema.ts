@@ -63,9 +63,6 @@ export function getOutreachMessageJsonSchema(channel: z.infer<typeof OutreachCha
   } as const;
 }
 
-/** @deprecated Use getOutreachMessageJsonSchema(channel) */
-export const OUTREACH_MESSAGE_JSON_SCHEMA = getOutreachMessageJsonSchema("EMAIL");
-
 /** Converts plain-text paragraphs to simple HTML for email delivery. */
 export function bodyTextToHtml(bodyText: string): string {
   const paragraphs = bodyText

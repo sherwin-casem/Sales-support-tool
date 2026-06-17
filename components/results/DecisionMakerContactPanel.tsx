@@ -1,8 +1,8 @@
 "use client";
 
-import type { DecisionMakerContact } from "@/lib/results/decision-maker-contact";
-import { displayValue, hasDisplayValue } from "@/lib/results/display-fields";
-import { normalizePhoneHref } from "@/lib/results/profile-contacts";
+import type { DecisionMakerContact } from "@/lib/display/decision-maker-contact";
+import { displayValue, hasDisplayValue } from "@/lib/display/display-fields";
+import { normalizePhoneHref } from "@/lib/display/profile-contacts";
 
 interface DecisionMakerContactPanelProps {
   contact: DecisionMakerContact;
